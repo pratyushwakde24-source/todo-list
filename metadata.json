@@ -1,0 +1,6 @@
+{
+  "name": "TaskFlow — Smart To-Do Manager",
+  "description": "Presentation-ready C++ and Java To-Do Management System featuring ProcessBuilder IPC, RFC 4180 CSV persistence, and Swing UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

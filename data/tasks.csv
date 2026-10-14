@@ -1,0 +1,8 @@
+id,title,description,category,priority,dueDate,completed,createdAt
+task-1,Complete Data Structures assignment,"Implement Red-Black tree deletion and benchmark search latency.",COLLEGE,HIGH,2026-10-15,false,2026-10-14T09:00:00
+task-2,Prepare Java practical demonstration,"Walk through ProcessBuilder IPC architecture and RFC 4180 CSV parser.",COLLEGE,MEDIUM,2026-10-14,false,2026-10-14T09:15:00
+task-3,Submit Final Project Report,"Compile IEEE format project report, system architecture diagrams, and test results.",PROJECTS,HIGH,2026-10-17,false,2026-10-14T09:30:00
+task-4,Review OS synchronization lecture,"Revise semaphores, mutex locks, and inter-process message passing.",COLLEGE,MEDIUM,2026-10-18,false,2026-10-14T09:45:00
+task-5,Organize personal study notes,"Sort semester revision flashcards into binders.",PERSONAL,LOW,2026-10-21,false,2026-10-14T10:00:00
+task-6,Submit Lab Assistant Timesheet,"Log university research lab assistant hours for the academic week.",WORK,MEDIUM,2026-10-12,false,2026-10-14T08:00:00
+task-7,Set up Git repository for presentation,"Initialize clean commit history and tag presentation-ready release v1.0.",PROJECTS,MEDIUM,2026-10-13,true,2026-10-13T16:00:00

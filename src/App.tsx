@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CheckCircle2, Circle, Clock, Calendar, 
-  Search, Trash2, Edit3, Plus, RefreshCw, Download, Upload,
+  Search, Trash2, Edit3, Plus, Download, Upload,
   SlidersHorizontal, CheckCheck, FolderKanban,
-  Settings as SettingsIcon, Info, LayoutDashboard,
-  CalendarDays, User, ShieldCheck, X, AlertTriangle, ArrowUpDown
+  Settings as SettingsIcon, LayoutDashboard,
+  CalendarDays, X
 } from 'lucide-react';
 import { Task, Priority, Category, DashboardStats } from './types';
 import { 
@@ -25,11 +25,10 @@ type NavigationTab =
   | 'upcoming' 
   | 'completed' 
   | 'categories' 
-  | 'settings' 
-  | 'about';
+  | 'settings';
 
 export default function App() {
-  // Navigation State (Restricted to 8 allowed sections)
+  // Navigation State (Exclusively 7 allowed tabs)
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -76,11 +75,11 @@ export default function App() {
   const [modalCompleted, setModalCompleted] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Notification Banner
+  // Temporary Notification Toast
   const [notification, setNotification] = useState<string | null>(null);
   const showNotice = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
+    setTimeout(() => setNotification(null), 3000);
   };
 
   // Confirmation Dialog
@@ -95,7 +94,7 @@ export default function App() {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
 
-  // Time-based greeting for Dinesh
+  // Time-based greeting
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -168,7 +167,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
       setTasks(prev => [newTask, ...prev]);
-      showNotice('New task created successfully.');
+      showNotice('New task created.');
     }
 
     setIsTaskModalOpen(false);
@@ -208,25 +207,11 @@ export default function App() {
     setConfirmDialog({
       isOpen: true,
       title: 'Clear Completed Tasks',
-      message: `Are you sure you want to remove all ${count} completed tasks from storage?`,
+      message: `Are you sure you want to remove all ${count} completed tasks?`,
       onConfirm: () => {
         setTasks(prev => prev.filter(t => !t.completed));
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         showNotice(`Removed ${count} completed tasks.`);
-      }
-    });
-  };
-
-  // Restore Default Sample Tasks
-  const restoreSampleTasks = () => {
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Restore Default Tasks',
-      message: 'This will reset your task list to the default recommended starter tasks. Do you want to continue?',
-      onConfirm: () => {
-        setTasks(INITIAL_TASKS);
-        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-        showNotice('Default tasks restored.');
       }
     });
   };
@@ -262,7 +247,7 @@ export default function App() {
             const newOnly = imported.filter(t => !existingIds.has(t.id));
             return [...newOnly, ...prev];
           });
-          showNotice(`Successfully imported ${imported.length} tasks from CSV.`);
+          showNotice(`Imported ${imported.length} tasks from CSV.`);
         } else {
           showNotice('No valid task records found in CSV file.');
         }
@@ -372,7 +357,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* TOP NOTIFICATION TOAST */}
+      {/* Toast Notification */}
       {notification && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E2330] border border-[#F59E0B]/40 text-slate-100 text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
           <CheckCircle2 className="w-4 h-4 text-[#F59E0B]" />
@@ -383,25 +368,18 @@ export default function App() {
       {/* TOP HEADER BAR */}
       <header className="h-16 border-b border-[#222838] px-4 sm:px-6 flex items-center justify-between gap-4 bg-[#141822] sticky top-0 z-30">
         
-        {/* Brand Wordmark */}
+        {/* TaskFlow Logo & Name */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EA580C] to-[#F59E0B] flex items-center justify-center font-bold text-white shadow-md text-sm">
             TF
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap">
-                TaskFlow
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B] font-medium hidden sm:inline">
-                Smart To-Do Manager
-              </span>
-            </div>
-          </div>
+          <span className="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap">
+            TaskFlow
+          </span>
         </div>
 
-        {/* Desktop Primary Navigation (Strict 8 items) */}
-        <nav className="hidden xl:flex items-center gap-1 text-xs font-medium text-slate-300">
+        {/* Desktop Primary Navigation (Strict 7 items) */}
+        <nav className="hidden lg:flex items-center gap-1 text-xs font-medium text-slate-300">
           <button 
             onClick={() => setActiveTab('dashboard')}
             className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
@@ -452,12 +430,6 @@ export default function App() {
           >
             Settings
           </button>
-          <button 
-            onClick={() => setActiveTab('about')}
-            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'about' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
-          >
-            About
-          </button>
         </nav>
 
         {/* Right Section: Add Task & Administrator Profile */}
@@ -472,29 +444,26 @@ export default function App() {
             <span>Add Task</span>
           </button>
 
-          {/* Administrator Profile Pill */}
+          {/* Small Administrator Profile Badge */}
           <div 
-            onClick={() => setActiveTab('about')}
-            title="Administrator Profile: Dinesh Nikam"
-            className="hidden md:flex items-center gap-2.5 pl-3 border-l border-[#222838] cursor-pointer group"
+            onClick={() => setActiveTab('settings')}
+            title="Dinesh Nikam · System Administrator"
+            className="hidden sm:flex items-center gap-2 pl-2 cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#252C3D] to-[#363F56] border border-[#3E4862] flex items-center justify-center text-xs font-bold text-[#F59E0B] group-hover:border-[#F59E0B]/50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-[#252C3D] border border-[#3E4862] flex items-center justify-center text-xs font-bold text-[#F59E0B]">
               DN
             </div>
-            <div className="text-left">
-              <p className="text-xs font-medium text-white group-hover:text-[#F59E0B] transition-colors leading-tight">
+            <div className="hidden md:block text-left">
+              <p className="text-xs font-medium text-white leading-tight">
                 Dinesh Nikam
-              </p>
-              <p className="text-[10px] text-slate-400 leading-tight">
-                System Administrator
               </p>
             </div>
           </div>
 
-          {/* Mobile Menu Hamburger Toggle */}
+          {/* Mobile Menu Toggle */}
           <button 
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="xl:hidden p-2 text-slate-400 hover:text-white bg-[#1C2230] rounded-lg"
+            className="lg:hidden p-2 text-slate-400 hover:text-white bg-[#1C2230] rounded-lg"
             aria-label="Toggle Navigation Menu"
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -505,13 +474,13 @@ export default function App() {
 
       {/* MOBILE MENU DROPDOWN */}
       {mobileMenuOpen && (
-        <div className="xl:hidden bg-[#141822] border-b border-[#222838] px-4 py-3 flex flex-col gap-1 text-xs">
+        <div className="lg:hidden bg-[#141822] border-b border-[#222838] px-4 py-3 flex flex-col gap-1 text-xs">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#222838]">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-[#252C3D] flex items-center justify-center font-bold text-[10px] text-[#F59E0B]">
                 DN
               </div>
-              <span className="font-semibold text-white">Dinesh Nikam · Administrator</span>
+              <span className="font-semibold text-white">Dinesh Nikam</span>
             </div>
             <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 p-1">
               <X className="w-4 h-4" />
@@ -524,8 +493,7 @@ export default function App() {
             { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
             { id: 'completed', label: `Completed (${completedCount})` },
             { id: 'categories', label: 'Categories' },
-            { id: 'settings', label: 'Settings' },
-            { id: 'about', label: 'About' }
+            { id: 'settings', label: 'Settings' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -544,12 +512,11 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex max-w-7xl w-full mx-auto p-4 sm:p-6 gap-6">
         
-        {/* DESKTOP SIDEBAR NAVIGATION */}
-        <aside className="w-60 shrink-0 hidden lg:flex flex-col gap-5">
+        {/* COMPACT SIDEBAR NAVIGATION (Desktop) */}
+        <aside className="w-56 shrink-0 hidden lg:flex flex-col gap-4">
           
-          {/* Main Navigation Items */}
           <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-3 flex flex-col gap-1 shadow-sm">
-            <span className="text-[11px] font-semibold text-slate-400 px-3 py-1.5 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-400 px-3 py-1 uppercase tracking-wider">
               NAVIGATION
             </span>
             
@@ -630,50 +597,28 @@ export default function App() {
               <SettingsIcon className="w-4 h-4" />
               Settings
             </button>
-
-            <button 
-              onClick={() => setActiveTab('about')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'about' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
-            >
-              <Info className="w-4 h-4" />
-              About
-            </button>
           </div>
 
-          {/* Data Export & Import Card */}
-          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-4 flex flex-col gap-2.5 text-xs shadow-sm">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">DATA PERSISTENCE</span>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              Standard RFC 4180 CSV export and import.
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-1">
+          {/* Quick CSV Export/Import Widget */}
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-3.5 flex flex-col gap-2 text-xs shadow-sm">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">BACKUP & CSV</span>
+            <div className="grid grid-cols-2 gap-2 pt-0.5">
               <button 
                 onClick={handleDownloadCsv}
-                className="w-full py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                title="Export all tasks as CSV"
+                className="py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1"
+                title="Export tasks as CSV"
               >
                 <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
                 Export
               </button>
               <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                title="Import tasks from CSV file"
+                className="py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1"
+                title="Import tasks from CSV"
               >
                 <Upload className="w-3.5 h-3.5 text-[#F59E0B]" />
                 Import
               </button>
-            </div>
-          </div>
-
-          {/* Administrator Profile Card */}
-          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-4 flex items-center gap-3 shadow-sm">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#252C3D] to-[#3B4663] border border-[#445070] flex items-center justify-center text-xs font-bold text-[#F59E0B] shrink-0">
-              DN
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-white truncate">Dinesh Nikam</p>
-              <p className="text-[11px] text-slate-400 truncate">System Administrator</p>
             </div>
           </div>
 
@@ -688,7 +633,7 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <div className="flex flex-col gap-6">
               
-              {/* Header Greeting & Add Task Banner */}
+              {/* Welcome Header */}
               <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                 <div>
                   <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -699,13 +644,6 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button 
-                    onClick={handleDownloadCsv}
-                    className="px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
-                    Export CSV
-                  </button>
                   <button 
                     onClick={() => openAddModal()}
                     className="px-4 py-2 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors shadow-sm flex items-center gap-2"
@@ -728,7 +666,7 @@ export default function App() {
                     {stats.totalTasks}
                   </span>
                   <span className="text-xs text-slate-400 mt-1">
-                    All active & archived tasks
+                    All tasks
                   </span>
                 </div>
 
@@ -741,7 +679,7 @@ export default function App() {
                     {stats.completedTasks}
                   </span>
                   <span className="text-xs text-slate-400 mt-1">
-                    Verified completed deliverables
+                    Tasks finished
                   </span>
                 </div>
 
@@ -754,7 +692,7 @@ export default function App() {
                     {stats.pendingTasks}
                   </span>
                   <span className="text-xs text-slate-400 mt-1">
-                    Tasks awaiting completion
+                    Tasks in progress
                   </span>
                 </div>
 
@@ -767,18 +705,18 @@ export default function App() {
                     {stats.overdueTasks}
                   </span>
                   <span className="text-xs text-slate-400 mt-1">
-                    Past target due date
+                    Past due date
                   </span>
                 </div>
 
               </div>
 
-              {/* Overall Completion Progress */}
+              {/* Completion Progress Bar */}
               <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-3 shadow-sm">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-semibold text-white">Overall Completion Progress</span>
+                  <span className="font-semibold text-white">Completion Progress</span>
                   <span className="font-mono tabular-nums text-[#F59E0B] font-bold">
-                    {stats.completionPercentage}% Complete
+                    {stats.completionPercentage}%
                   </span>
                 </div>
                 <div className="w-full bg-[#0F1117] rounded-full h-3 overflow-hidden border border-[#262C3D]">
@@ -788,12 +726,12 @@ export default function App() {
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{stats.completedTasks} of {stats.totalTasks} deliverables finished</span>
-                  <span>{stats.highPriorityPending} high-priority pending item(s)</span>
+                  <span>{stats.completedTasks} of {stats.totalTasks} tasks completed</span>
+                  <span>{stats.pendingTasks} remaining</span>
                 </div>
               </div>
 
-              {/* Main 2-Column Content Grid: Today's Tasks & Upcoming Deadlines */}
+              {/* Today's Tasks & Upcoming Tasks */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* Today's Tasks Panel */}
@@ -834,7 +772,7 @@ export default function App() {
                               {t.title}
                             </p>
                             <p className="text-[11px] text-slate-400 mt-0.5">
-                              {t.category} · Due Today
+                              {t.category}
                             </p>
                           </div>
                         </div>
@@ -846,18 +784,18 @@ export default function App() {
                     {tasks.filter(t => isDueToday(t)).length === 0 && (
                       <div className="py-8 text-center flex flex-col items-center justify-center">
                         <CheckCircle2 className="w-8 h-8 text-slate-600 mb-1" />
-                        <p className="text-xs text-slate-400">No tasks due today. You are all caught up!</p>
+                        <p className="text-xs text-slate-400">No tasks due today.</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Upcoming Deadlines Panel */}
+                {/* Upcoming Tasks Panel */}
                 <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CalendarDays className="w-4 h-4 text-[#F59E0B]" />
-                      <h3 className="font-bold text-white text-sm">Upcoming Deadlines</h3>
+                      <h3 className="font-bold text-white text-sm">Upcoming Tasks</h3>
                     </div>
                     <button 
                       onClick={() => setActiveTab('upcoming')}
@@ -904,102 +842,6 @@ export default function App() {
 
               </div>
 
-              {/* Second 2-Column Row: High Priority & Recent Tasks */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* High-Priority Tasks Panel */}
-                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-[#EF4444]" />
-                      <h3 className="font-bold text-white text-sm">High Priority Tasks</h3>
-                    </div>
-                    <span className="text-xs font-mono text-slate-400">
-                      {stats.highPriorityPending} pending
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-2.5">
-                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').slice(0, 4).map(t => (
-                      <div 
-                        key={t.id} 
-                        className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <button 
-                            onClick={() => toggleTask(t.id)} 
-                            className="text-slate-400 hover:text-[#22C55E] transition-colors shrink-0"
-                          >
-                            <Circle className="w-4 h-4" />
-                          </button>
-                          <div className="truncate">
-                            <p className="text-xs font-medium text-white truncate">{t.title}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              {t.category} · Due {t.dueDate || 'No date'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-semibold text-[#EF4444] px-2 py-0.5 rounded bg-[#EF4444]/10 border border-[#EF4444]/30 shrink-0">
-                          HIGH
-                        </span>
-                      </div>
-                    ))}
-                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').length === 0 && (
-                      <div className="py-6 text-center text-xs text-slate-400">
-                        No high priority tasks pending.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Recent Tasks */}
-                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-white text-sm">Recent Tasks</h3>
-                    <button 
-                      onClick={() => setActiveTab('tasks')}
-                      className="text-xs text-[#F59E0B] hover:underline"
-                    >
-                      View All
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-2.5">
-                    {tasks.slice(0, 4).map(t => (
-                      <div 
-                        key={t.id} 
-                        className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <button 
-                            onClick={() => toggleTask(t.id)} 
-                            className="text-slate-400 hover:text-[#22C55E] transition-colors shrink-0"
-                          >
-                            {t.completed ? (
-                              <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
-                            ) : (
-                              <Circle className="w-4 h-4" />
-                            )}
-                          </button>
-                          <div className="truncate">
-                            <p className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-400' : 'text-white'}`}>
-                              {t.title}
-                            </p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              {t.category} · {t.dueDate || 'No due date'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border shrink-0 ${getPriorityBadge(t.priority)}`}>
-                          {t.priority}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
             </div>
           )}
 
@@ -1016,12 +858,12 @@ export default function App() {
                   <div>
                     <h2 className="text-xl font-bold text-white capitalize">
                       {activeTab === 'today' && "Today's Tasks"}
-                      {activeTab === 'upcoming' && "Upcoming Deadlines"}
+                      {activeTab === 'upcoming' && "Upcoming Tasks"}
                       {activeTab === 'completed' && "Completed Tasks"}
                       {activeTab === 'tasks' && "All Tasks"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Showing {displayTasks.length} task(s). Stored securely in RFC 4180 format.
+                      Showing {displayTasks.length} task(s)
                     </p>
                   </div>
 
@@ -1052,7 +894,7 @@ export default function App() {
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input 
                       type="text"
-                      placeholder="Search title or description..."
+                      placeholder="Search tasks..."
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
                       className="w-full bg-[#0F1117] border border-[#262C3D] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
@@ -1121,8 +963,8 @@ export default function App() {
                 {displayTasks.length === 0 ? (
                   <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-12 text-center flex flex-col items-center justify-center shadow-sm">
                     <CheckCircle2 className="w-10 h-10 text-slate-600 mb-2" />
-                    <p className="text-sm font-semibold text-slate-300">No tasks found matching criteria.</p>
-                    <p className="text-xs text-slate-400 mt-1">Try modifying your search or click '+ Add Task' to create one.</p>
+                    <p className="text-sm font-semibold text-slate-300">No tasks found.</p>
+                    <p className="text-xs text-slate-400 mt-1">Try modifying your filter or create a new task.</p>
                   </div>
                 ) : (
                   displayTasks.map(task => {
@@ -1132,7 +974,7 @@ export default function App() {
                         key={task.id}
                         className={`bg-[#161924] border rounded-xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all shadow-sm ${task.completed ? 'border-[#262C3D]/60 opacity-70' : 'border-[#262C3D] hover:border-[#38425A]'}`}
                       >
-                        {/* Left: Completion Checkbox & Details */}
+                        {/* Checkbox & Details */}
                         <div className="flex items-start gap-3.5 flex-1 min-w-0">
                           <button 
                             onClick={() => toggleTask(task.id)}
@@ -1159,7 +1001,7 @@ export default function App() {
                               </p>
                             )}
 
-                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-2.5 flex-wrap">
+                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-2 flex-wrap">
                               <span className={`px-2 py-0.5 rounded border text-[11px] font-medium ${getCategoryBadge(task.category)}`}>
                                 {task.category}
                               </span>
@@ -1175,7 +1017,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Right: Actions */}
+                        {/* Actions */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button 
                             onClick={() => toggleTask(task.id)}
@@ -1217,10 +1059,10 @@ export default function App() {
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <FolderKanban className="w-5 h-5 text-[#F59E0B]" />
-                    Task Categories
+                    Categories
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    Organize and manage your task distribution across work and personal domains.
+                    Manage tasks grouped by project and area.
                   </p>
                 </div>
                 <button 
@@ -1296,31 +1138,21 @@ export default function App() {
               <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 shadow-sm">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <SettingsIcon className="w-5 h-5 text-[#F59E0B]" />
-                  Application Settings
+                  Settings
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Manage data persistence, backup options, and system preferences.
+                  Task preferences and data options.
                 </p>
               </div>
 
-              {/* Data & Persistence */}
+              {/* Data & Preferences */}
               <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-white">Data Storage & Backup</h3>
+                <h3 className="text-sm font-semibold text-white">Task Preferences</h3>
                 
                 <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
                   <div>
-                    <p className="text-xs font-medium text-white">Local Task Storage Format</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">RFC 4180 Comma-Separated Values (CSV) via LocalStorage</p>
-                  </div>
-                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#0F1117] border border-[#262C3D] text-slate-300">
-                    tasks.csv
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
-                  <div>
-                    <p className="text-xs font-medium text-white">Automatic State Persistence</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Immediately saves state after any add, edit, or delete</p>
+                    <p className="text-xs font-medium text-white">Auto-save State</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Automatically save task modifications</p>
                   </div>
                   <button 
                     onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
@@ -1332,8 +1164,8 @@ export default function App() {
 
                 <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
                   <div>
-                    <p className="text-xs font-medium text-white">Overdue Warning Highlights</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Highlight tasks whose due date has passed</p>
+                    <p className="text-xs font-medium text-white">Overdue Highlights</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Highlight tasks past their due date in red</p>
                   </div>
                   <button 
                     onClick={() => setShowOverdueBanner(!showOverdueBanner)}
@@ -1343,10 +1175,10 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#262C3D]">
                   <div>
-                    <p className="text-xs font-medium text-white">Manual Export / Import</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Backup your task list to disk or load an existing CSV</p>
+                    <p className="text-xs font-medium text-white">Backup & Restore (CSV)</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Download your task list or restore from a CSV file</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
@@ -1366,104 +1198,16 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-[#262C3D]">
+                {/* Administrator Profile in Settings */}
+                <div className="flex items-center justify-between pt-1">
                   <div>
-                    <p className="text-xs font-medium text-white">Reset Starter Tasks</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Replaces current tasks with the default starter set</p>
+                    <p className="text-xs font-medium text-white">Administrator</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Dinesh Nikam · System Administrator</p>
                   </div>
-                  <button 
-                    onClick={restoreSampleTasks}
-                    className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Reset Tasks
-                  </button>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#0F1117] border border-[#262C3D] text-slate-300">
+                    Administrator
+                  </span>
                 </div>
-              </div>
-
-              {/* System Profile Card */}
-              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-3 shadow-sm">
-                <h3 className="text-sm font-semibold text-white">System Profile</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
-                    <span className="text-slate-400">Administrator</span>
-                    <p className="font-semibold text-white mt-1">Dinesh Nikam</p>
-                  </div>
-                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
-                    <span className="text-slate-400">Role</span>
-                    <p className="font-semibold text-white mt-1">System Administrator</p>
-                  </div>
-                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
-                    <span className="text-slate-400">Application</span>
-                    <p className="font-semibold text-white mt-1">TaskFlow — Smart To-Do Manager</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ==================================================================== */}
-          {/* 5. ABOUT VIEW */}
-          {/* ==================================================================== */}
-          {activeTab === 'about' && (
-            <div className="flex flex-col gap-6">
-              
-              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Info className="w-5 h-5 text-[#F59E0B]" />
-                  About TaskFlow
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  A high-performance, privacy-first task and productivity management system.
-                </p>
-              </div>
-
-              {/* Administrator Identity Card */}
-              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex items-center gap-4 shadow-sm">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#EA580C] to-[#F59E0B] flex items-center justify-center text-base font-bold text-white shadow-md shrink-0">
-                  DN
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Dinesh Nikam</h3>
-                  <p className="text-xs text-[#F59E0B] font-medium">System Administrator</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Application: TaskFlow — Smart To-Do Manager
-                  </p>
-                </div>
-              </div>
-
-              {/* Product Overview & Features */}
-              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-4 text-xs text-slate-300 leading-relaxed shadow-sm">
-                <h3 className="text-sm font-bold text-white">Product Overview</h3>
-                <p>
-                  <strong>TaskFlow</strong> is a dedicated productivity platform engineered for clarity, speed, and effortless task organization. It provides intuitive task scheduling, priority sorting, category segmentation, and local data persistence without third-party tracking or cloud lock-in.
-                </p>
-
-                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#262C3D]">Core Features</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
-                    <span className="font-semibold text-white">Priority & Deadline Management</span>
-                    <p className="text-slate-400 mt-1">High, Medium, and Low priority weighting with real-time overdue detection and chronological deadline sorting.</p>
-                  </div>
-                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
-                    <span className="font-semibold text-white">Dynamic Category Organization</span>
-                    <p className="text-slate-400 mt-1">Assign tasks to Work, Projects, College, Personal, or custom categories with progress analytics.</p>
-                  </div>
-                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
-                    <span className="font-semibold text-white">RFC 4180 CSV Persistence</span>
-                    <p className="text-slate-400 mt-1">Full backup and restore support with comma escaping and quote preservation for all your task records.</p>
-                  </div>
-                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
-                    <span className="font-semibold text-white">High Performance & Privacy First</span>
-                    <p className="text-slate-400 mt-1">Runs 100% locally in your browser with sub-millisecond response latency and immediate UI updates.</p>
-                  </div>
-                </div>
-
-                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#262C3D]">Architecture & Backend Co-Processor</h3>
-                <p className="text-slate-400">
-                  TaskFlow includes a modular multi-tier architecture. In addition to this web companion, the repository contains a standalone C++17 algorithmic engine and Java 17 desktop Swing application for offline local compilation, linked via standard ProcessBuilder streams.
-                </p>
               </div>
 
             </div>
@@ -1472,9 +1216,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* ==================================================================== */}
       {/* CREATE / EDIT TASK MODAL */}
-      {/* ==================================================================== */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <div className="bg-[#161924] border border-[#262C3D] rounded-xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
@@ -1503,7 +1245,7 @@ export default function App() {
                 <label className="font-semibold text-slate-300">Task Title *</label>
                 <input 
                   type="text"
-                  placeholder="e.g. Complete quarterly budget review"
+                  placeholder="e.g. Update client presentation slides"
                   value={modalTitle}
                   onChange={e => setModalTitle(e.target.value)}
                   className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
@@ -1514,7 +1256,7 @@ export default function App() {
                 <label className="font-semibold text-slate-300">Description (Optional)</label>
                 <textarea 
                   rows={3}
-                  placeholder="Enter additional details, notes, or subtasks..."
+                  placeholder="Enter details, notes, or subtasks..."
                   value={modalDesc}
                   onChange={e => setModalDesc(e.target.value)}
                   className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
@@ -1594,9 +1336,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ==================================================================== */}
       {/* CONFIRMATION DIALOG MODAL */}
-      {/* ==================================================================== */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <div className="bg-[#161924] border border-[#262C3D] rounded-xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4">

@@ -1,75 +1,73 @@
 import { Task, Priority, Category, DashboardStats } from '../types';
 
+export const getTodayStr = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const INITIAL_TASKS: Task[] = [
   {
     id: 'task-1',
-    title: 'Complete Data Structures assignment',
-    description: 'Implement Red-Black tree deletion and benchmark search latency.',
-    category: 'COLLEGE',
+    title: 'Review System Architecture and Performance Benchmarks',
+    description: 'Verify sub-millisecond sorting execution, memory allocations, and stress-test pipelines.',
+    category: 'WORK',
     priority: 'HIGH',
-    dueDate: '2026-10-15',
+    dueDate: getTodayStr(),
     completed: false,
-    createdAt: '2026-10-14T09:00:00'
+    createdAt: new Date().toISOString()
   },
   {
     id: 'task-2',
-    title: 'Prepare Java practical demonstration',
-    description: 'Walk through ProcessBuilder IPC architecture and RFC 4180 CSV parser.',
-    category: 'COLLEGE',
-    priority: 'MEDIUM',
-    dueDate: '2026-10-14',
+    title: 'Audit CSV Data Persistence and Integrity',
+    description: 'Ensure RFC 4180 quote escaping and atomic replacement protect against data loss.',
+    category: 'PROJECTS',
+    priority: 'HIGH',
+    dueDate: getTodayStr(),
     completed: false,
-    createdAt: '2026-10-14T09:15:00'
+    createdAt: new Date().toISOString()
   },
   {
     id: 'task-3',
-    title: 'Submit Final Project Report',
-    description: 'Compile IEEE format project report, system architecture diagrams, and test results.',
-    category: 'PROJECTS',
-    priority: 'HIGH',
-    dueDate: '2026-10-17',
+    title: 'Finalize Infrastructure Deployment Checklist',
+    description: 'Verify automated builds, edge routing, responsive layouts, and SSL certificates.',
+    category: 'WORK',
+    priority: 'MEDIUM',
+    dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
     completed: false,
-    createdAt: '2026-10-14T09:30:00'
+    createdAt: new Date().toISOString()
   },
   {
     id: 'task-4',
-    title: 'Review OS synchronization lecture',
-    description: 'Revise semaphores, mutex locks, and inter-process message passing.',
-    category: 'COLLEGE',
+    title: 'Quarterly Security & Access Permission Audit',
+    description: 'Review admin role delegations, credential security, and environment variable hygiene.',
+    category: 'WORK',
     priority: 'MEDIUM',
-    dueDate: '2026-10-18',
+    dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
     completed: false,
-    createdAt: '2026-10-14T09:45:00'
+    createdAt: new Date().toISOString()
   },
   {
     id: 'task-5',
-    title: 'Organize personal study notes',
-    description: 'Sort semester revision flashcards into binders.',
-    category: 'PERSONAL',
+    title: 'Schedule Team Sync on Sprint Deliverables',
+    description: 'Align task priority distribution, upcoming deadlines, and cross-functional dependencies.',
+    category: 'COLLEGE',
     priority: 'LOW',
-    dueDate: '2026-10-21',
+    dueDate: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
     completed: false,
-    createdAt: '2026-10-14T10:00:00'
+    createdAt: new Date().toISOString()
   },
   {
     id: 'task-6',
-    title: 'Submit Lab Assistant Timesheet',
-    description: 'Log university research lab assistant hours for the academic week.',
-    category: 'WORK',
-    priority: 'MEDIUM',
-    dueDate: '2026-10-12',
-    completed: false,
-    createdAt: '2026-10-14T08:00:00'
-  },
-  {
-    id: 'task-7',
-    title: 'Set up Git repository for presentation',
-    description: 'Initialize clean commit history and tag presentation-ready release v1.0.',
-    category: 'PROJECTS',
-    priority: 'MEDIUM',
-    dueDate: '2026-10-13',
+    title: 'Weekly Task Backlog Grooming & Clean-up',
+    description: 'Archive completed items, reprioritize pending items, and log weekly velocity.',
+    category: 'PERSONAL',
+    priority: 'LOW',
+    dueDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
     completed: true,
-    createdAt: '2026-10-13T16:00:00'
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
   }
 ];
 
@@ -82,17 +80,17 @@ export function priorityRank(p: Priority): number {
   }
 }
 
-export function isOverdue(task: Task, todayStr: string = '2026-10-14'): boolean {
+export function isOverdue(task: Task, todayStr: string = getTodayStr()): boolean {
   if (task.completed || !task.dueDate) return false;
   return task.dueDate < todayStr;
 }
 
-export function isDueToday(task: Task, todayStr: string = '2026-10-14'): boolean {
+export function isDueToday(task: Task, todayStr: string = getTodayStr()): boolean {
   if (task.completed || !task.dueDate) return false;
   return task.dueDate === todayStr;
 }
 
-export function calculateStats(tasks: Task[], todayStr: string = '2026-10-14'): DashboardStats {
+export function calculateStats(tasks: Task[], todayStr: string = getTodayStr()): DashboardStats {
   const total = tasks.length;
   let completed = 0;
   let pending = 0;
@@ -146,4 +144,95 @@ export function exportRfc4180Csv(tasks: Task[]): string {
   ].join(','));
 
   return [header, ...rows].join('\n');
+}
+
+export function importRfc4180Csv(csvText: string): Task[] {
+  const lines: string[] = [];
+  let currentLine = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+      currentLine += char;
+    } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && csvText[i + 1] === '\n') {
+        i++;
+      }
+      if (currentLine.trim()) {
+        lines.push(currentLine);
+      }
+      currentLine = '';
+    } else {
+      currentLine += char;
+    }
+  }
+  if (currentLine.trim()) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length <= 1) return [];
+
+  // Parse rows (ignoring header)
+  const parseRow = (line: string): string[] => {
+    const cells: string[] = [];
+    let cell = '';
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQuote && line[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQuote = !inQuote;
+        }
+      } else if (c === ',' && !inQuote) {
+        cells.push(cell);
+        cell = '';
+      } else {
+        cell += c;
+      }
+    }
+    cells.push(cell);
+    return cells;
+  };
+
+  const importedTasks: Task[] = [];
+  for (let idx = 1; idx < lines.length; idx++) {
+    const cells = parseRow(lines[idx]);
+    if (cells.length < 2 || !cells[1].trim()) continue;
+
+    const id = cells[0]?.trim() || `task-${Date.now()}-${idx}`;
+    const title = cells[1]?.trim() || 'Untitled Task';
+    const description = cells[2]?.trim() || '';
+    
+    const rawCategory = (cells[3]?.trim().toUpperCase() || 'OTHER') as Category;
+    const category: Category = ['COLLEGE', 'PERSONAL', 'WORK', 'PROJECTS', 'OTHER'].includes(rawCategory)
+      ? rawCategory
+      : 'OTHER';
+
+    const rawPriority = (cells[4]?.trim().toUpperCase() || 'MEDIUM') as Priority;
+    const priority: Priority = ['HIGH', 'MEDIUM', 'LOW'].includes(rawPriority)
+      ? rawPriority
+      : 'MEDIUM';
+
+    const dueDate = cells[5]?.trim() || '';
+    const completed = cells[6]?.trim().toLowerCase() === 'true';
+    const createdAt = cells[7]?.trim() || new Date().toISOString();
+
+    importedTasks.push({
+      id,
+      title,
+      description,
+      category,
+      priority,
+      dueDate,
+      completed,
+      createdAt
+    });
+  }
+
+  return importedTasks;
 }

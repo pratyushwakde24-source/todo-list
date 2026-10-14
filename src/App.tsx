@@ -1,15 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  CheckCircle2, Circle, AlertCircle, Clock, Calendar, 
-  Terminal, Code2, BookOpen, Layers, Check, Search, 
-  Trash2, Edit3, Plus, RefreshCw, Download, ExternalLink, 
-  ChevronRight, ArrowUpDown, ShieldCheck, Sparkles, X, Filter,
-  Settings as SettingsIcon, Info, FolderKanban, CheckCheck, Undo2,
-  CalendarDays, HardDrive, Cpu, TerminalSquare, SlidersHorizontal
+  CheckCircle2, Circle, Clock, Calendar, 
+  Search, Trash2, Edit3, Plus, RefreshCw, Download, Upload,
+  SlidersHorizontal, CheckCheck, FolderKanban,
+  Settings as SettingsIcon, Info, LayoutDashboard,
+  CalendarDays, User, ShieldCheck, X, AlertTriangle, ArrowUpDown
 } from 'lucide-react';
-import { Task, Priority, Category, DashboardStats, IpcLogEntry } from './types';
-import { INITIAL_TASKS, calculateStats, isOverdue, isDueToday, priorityRank, exportRfc4180Csv } from './utils/engine';
-import { SOURCE_FILES, SourceFile } from './data/sourceFiles';
+import { Task, Priority, Category, DashboardStats } from './types';
+import { 
+  INITIAL_TASKS, 
+  calculateStats, 
+  isOverdue, 
+  isDueToday, 
+  priorityRank, 
+  exportRfc4180Csv, 
+  importRfc4180Csv,
+  getTodayStr 
+} from './utils/engine';
 
 type NavigationTab = 
   | 'dashboard' 
@@ -18,20 +25,21 @@ type NavigationTab =
   | 'upcoming' 
   | 'completed' 
   | 'categories' 
-  | 'viva' 
-  | 'code' 
-  | 'tests' 
   | 'settings' 
   | 'about';
 
 export default function App() {
-  // Navigation State
+  // Navigation State (Restricted to 8 allowed sections)
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Hidden file input for CSV import
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Persistence in browser localStorage
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
-      const saved = localStorage.getItem('taskflow_tasks_v1');
+      const saved = localStorage.getItem('taskflow_tasks_v2');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error('Failed to load tasks from localStorage', e);
@@ -41,13 +49,13 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('taskflow_tasks_v1', JSON.stringify(tasks));
+      localStorage.setItem('taskflow_tasks_v2', JSON.stringify(tasks));
     } catch (e) {
       console.error('Failed to save tasks', e);
     }
   }, [tasks]);
 
-  // Statistics dynamically calculated
+  // Dynamically calculated statistics
   const stats: DashboardStats = useMemo(() => calculateStats(tasks), [tasks]);
 
   // Filtering & Sorting State
@@ -62,11 +70,18 @@ export default function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [modalDesc, setModalDesc] = useState('');
-  const [modalCategory, setModalCategory] = useState<Category>('COLLEGE');
+  const [modalCategory, setModalCategory] = useState<Category>('WORK');
   const [modalPriority, setModalPriority] = useState<Priority>('MEDIUM');
-  const [modalDueDate, setModalDueDate] = useState('2026-10-16');
+  const [modalDueDate, setModalDueDate] = useState(getTodayStr());
   const [modalCompleted, setModalCompleted] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  // Notification Banner
+  const [notification, setNotification] = useState<string | null>(null);
+  const showNotice = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3500);
+  };
 
   // Confirmation Dialog
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -76,78 +91,26 @@ export default function App() {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  // IPC Simulation Console State
-  const [ipcLogs, setIpcLogs] = useState<IpcLogEntry[]>([
-    {
-      timestamp: '10:00:12',
-      action: 'BOOTSTRAP',
-      requestPayload: '{"action":"PING"}',
-      responsePayload: '{"status":"OK","message":"TaskFlow C++ Engine 1.0 Ready","engine":"C++17 Standalone IPC"}',
-      latencyMs: 3.2,
-      status: 'SUCCESS'
-    }
-  ]);
-  const [isIpcRunning, setIsIpcRunning] = useState(false);
-
-  // Selected Source File in Code Explorer
-  const [selectedFile, setSelectedFile] = useState<SourceFile>(SOURCE_FILES[0]);
-
-  // Automated Tests runner state
-  const [testResults, setTestResults] = useState<{
-    ran: boolean;
-    running: boolean;
-    outputLog?: string;
-    items: { name: string; suite: 'C++ Engine' | 'Java Service'; status: 'PASSED' | 'RUNNING' | 'PENDING' }[];
-  }>({
-    ran: true,
-    running: false,
-    outputLog: `=== Running TaskFlow C++ Engine Test Suite ===
-[Test] Priority Ranking: PASSED
-[Test] Overdue & Due Today Detection: PASSED
-[Test] Validation Logic: PASSED
-[Test] Aggregate Statistics: PASSED
-[Test] Sorting and Filtering: PASSED
-[Test] JSON IPC Command Parser: PASSED
-=== ALL C++ ENGINE TESTS PASSED SUCCESSFULLY! ===
-
-=== Running TaskFlow Java Automated Test Suite ===
-[CppEngineClient] C++ Engine detected & verified: cpp-engine/build/bin/task_engine
-[Test] Task Creation & Input Validation: PASSED
-[Test] RFC 4180 Comma & Quote Escaping: PASSED
-[Test] Task Update & Completion Toggle: PASSED
-[Test] Category Filtering and Priority Sorting: PASSED
-[Test] Task Deletion: PASSED
-[Test] Dashboard Statistics Computation: PASSED
-=== ALL JAVA TESTS PASSED SUCCESSFULLY! ===`,
-    items: [
-      { name: 'Priority Ranking (High=3, Medium=2, Low=1)', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'Overdue & Due Today Detection', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'Input Constraints & Title Validation', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'Aggregate Statistics & Velocity Formula', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'Multi-Criteria Sorting (Introsort)', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'JSON Stdin/Stdout IPC Command Parser', suite: 'C++ Engine', status: 'PASSED' },
-      { name: 'RFC 4180 Comma & Quote Escaping', suite: 'Java Service', status: 'PASSED' },
-      { name: 'Atomic File Replacement (tasks.csv.tmp)', suite: 'Java Service', status: 'PASSED' },
-      { name: 'ProcessBuilder Spawn & Failover Recovery', suite: 'Java Service', status: 'PASSED' },
-      { name: 'Task Deletion & Observer Event Dispatch', suite: 'Java Service', status: 'PASSED' }
-    ]
-  });
-
   // Settings State
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
 
-  // Search filter for Viva Questions
-  const [vivaSearch, setVivaSearch] = useState('');
+  // Time-based greeting for Dinesh
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
 
   // Handle open Add Modal
   const openAddModal = (presetCategory?: Category) => {
     setEditingTask(null);
     setModalTitle('');
     setModalDesc('');
-    setModalCategory(presetCategory || 'COLLEGE');
+    setModalCategory(presetCategory || 'WORK');
     setModalPriority('MEDIUM');
-    setModalDueDate(new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]);
+    setModalDueDate(getTodayStr());
     setModalCompleted(false);
     setModalError(null);
     setIsTaskModalOpen(true);
@@ -160,7 +123,7 @@ export default function App() {
     setModalDesc(task.description);
     setModalCategory(task.category);
     setModalPriority(task.priority);
-    setModalDueDate(task.dueDate);
+    setModalDueDate(task.dueDate || getTodayStr());
     setModalCompleted(task.completed);
     setModalError(null);
     setIsTaskModalOpen(true);
@@ -192,6 +155,7 @@ export default function App() {
         dueDate: modalDueDate.trim(),
         completed: modalCompleted
       } : t));
+      showNotice('Task updated successfully.');
     } else {
       const newTask: Task = {
         id: `task-${Date.now()}`,
@@ -204,18 +168,8 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
       setTasks(prev => [newTask, ...prev]);
+      showNotice('New task created successfully.');
     }
-
-    // Record IPC Log
-    const newLog: IpcLogEntry = {
-      timestamp: new Date().toLocaleTimeString(),
-      action: editingTask ? 'UPDATE_TASK' : 'CREATE_TASK',
-      requestPayload: JSON.stringify({ action: 'STATISTICS', tasksCount: tasks.length + 1 }),
-      responsePayload: JSON.stringify({ status: 'OK', statsRecalculated: true }),
-      latencyMs: +(Math.random() * 2 + 1.2).toFixed(1),
-      status: 'SUCCESS'
-    };
-    setIpcLogs(prev => [newLog, ...prev.slice(0, 19)]);
 
     setIsTaskModalOpen(false);
   };
@@ -224,7 +178,9 @@ export default function App() {
   const toggleTask = (id: string) => {
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
-        return { ...t, completed: !t.completed };
+        const nextCompleted = !t.completed;
+        showNotice(nextCompleted ? 'Task marked as completed.' : 'Task reopened.');
+        return { ...t, completed: nextCompleted };
       }
       return t;
     }));
@@ -239,123 +195,40 @@ export default function App() {
       onConfirm: () => {
         setTasks(prev => prev.filter(t => t.id !== task.id));
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        showNotice('Task deleted.');
       }
     });
   };
 
   // Clear Completed Tasks
   const clearCompleted = () => {
-    const completedCount = tasks.filter(t => t.completed).length;
-    if (completedCount === 0) return;
+    const count = tasks.filter(t => t.completed).length;
+    if (count === 0) return;
 
     setConfirmDialog({
       isOpen: true,
       title: 'Clear Completed Tasks',
-      message: `Are you sure you want to remove all ${completedCount} completed tasks from storage?`,
+      message: `Are you sure you want to remove all ${count} completed tasks from storage?`,
       onConfirm: () => {
         setTasks(prev => prev.filter(t => !t.completed));
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        showNotice(`Removed ${count} completed tasks.`);
       }
     });
   };
 
-  // Restore Academic Sample Tasks
+  // Restore Default Sample Tasks
   const restoreSampleTasks = () => {
-    setTasks(INITIAL_TASKS);
-    setIpcLogs(prev => [
-      {
-        timestamp: new Date().toLocaleTimeString(),
-        action: 'RESTORE_SAMPLE_DATA',
-        requestPayload: '{"action":"SEED_SAMPLES","count":7}',
-        responsePayload: '{"status":"OK","seeded":7,"file":"data/tasks.csv"}',
-        latencyMs: 2.1,
-        status: 'SUCCESS'
-      },
-      ...prev
-    ]);
-  };
-
-  // Run C++ IPC Ping (connects to real backend API or simulated fallback)
-  const runIpcPing = async () => {
-    setIsIpcRunning(true);
-    try {
-      const response = await fetch('/api/ipc/ping', { method: 'POST' });
-      if (response.ok) {
-        const data = await response.json();
-        const pingLog: IpcLogEntry = {
-          timestamp: new Date().toLocaleTimeString(),
-          action: 'REAL_CPP_EXEC',
-          requestPayload: '{"action":"PING"}',
-          responsePayload: data.stdout || JSON.stringify(data),
-          latencyMs: data.latencyMs || 2.4,
-          status: 'SUCCESS'
-        };
-        setIpcLogs(prev => [pingLog, ...prev]);
-        setIsIpcRunning(false);
-        return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Restore Default Tasks',
+      message: 'This will reset your task list to the default recommended starter tasks. Do you want to continue?',
+      onConfirm: () => {
+        setTasks(INITIAL_TASKS);
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        showNotice('Default tasks restored.');
       }
-    } catch (e) {
-      // Backend not running full API, use local fallback
-    }
-
-    setTimeout(() => {
-      const latency = +(Math.random() * 2.5 + 2.0).toFixed(1);
-      const pingLog: IpcLogEntry = {
-        timestamp: new Date().toLocaleTimeString(),
-        action: 'PING',
-        requestPayload: '{"action":"PING"}',
-        responsePayload: '{"status":"OK","message":"TaskFlow C++ Engine 1.0 Ready","engine":"C++17 Standalone IPC","timestamp":"' + new Date().toISOString() + '"}',
-        latencyMs: latency,
-        status: 'SUCCESS'
-      };
-      setIpcLogs(prev => [pingLog, ...prev]);
-      setIsIpcRunning(false);
-    }, 250);
-  };
-
-  // Run Automated Tests (executes real make test or fallback suite)
-  const handleRunTests = async () => {
-    setTestResults(prev => ({
-      ...prev,
-      running: true,
-      items: prev.items.map(i => ({ ...i, status: 'RUNNING' }))
-    }));
-
-    try {
-      const resp = await fetch('/api/run-tests', { method: 'POST' });
-      if (resp.ok) {
-        const data = await resp.json();
-        setTestResults({
-          running: false,
-          ran: true,
-          outputLog: data.output || 'make test completed with 100% success.',
-          items: [
-            { name: 'Priority Ranking (High=3, Medium=2, Low=1)', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'Overdue & Due Today Detection', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'Input Constraints & Title Validation', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'Aggregate Statistics & Velocity Formula', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'Multi-Criteria Sorting (Introsort)', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'JSON Stdin/Stdout IPC Command Parser', suite: 'C++ Engine', status: 'PASSED' },
-            { name: 'RFC 4180 Comma & Quote Escaping', suite: 'Java Service', status: 'PASSED' },
-            { name: 'Atomic File Replacement (tasks.csv.tmp)', suite: 'Java Service', status: 'PASSED' },
-            { name: 'ProcessBuilder Spawn & Failover Recovery', suite: 'Java Service', status: 'PASSED' },
-            { name: 'Task Deletion & Observer Event Dispatch', suite: 'Java Service', status: 'PASSED' }
-          ]
-        });
-        return;
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    setTimeout(() => {
-      setTestResults(prev => ({
-        ...prev,
-        running: false,
-        ran: true,
-        items: prev.items.map(i => ({ ...i, status: 'PASSED' }))
-      }));
-    }, 500);
+    });
   };
 
   // Download CSV
@@ -365,31 +238,62 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', 'tasks.csv');
+    link.setAttribute('download', `tasks_${getTodayStr()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showNotice('Exported tasks to CSV.');
+  };
+
+  // Import CSV
+  const handleImportCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) return;
+        const imported = importRfc4180Csv(text);
+        if (imported.length > 0) {
+          setTasks(prev => {
+            const existingIds = new Set(prev.map(t => t.id));
+            const newOnly = imported.filter(t => !existingIds.has(t.id));
+            return [...newOnly, ...prev];
+          });
+          showNotice(`Successfully imported ${imported.length} tasks from CSV.`);
+        } else {
+          showNotice('No valid task records found in CSV file.');
+        }
+      } catch (err) {
+        showNotice('Failed to parse CSV file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Filtered & Sorted Tasks based on active tab and filters
   const displayTasks = useMemo(() => {
+    const today = getTodayStr();
+
     return tasks.filter(t => {
       // Tab-specific filters
-      if (activeTab === 'today' && !isDueToday(t)) return false;
+      if (activeTab === 'today' && !isDueToday(t, today)) return false;
       if (activeTab === 'upcoming') {
-        const todayStr = '2026-10-14';
-        if (t.completed || !t.dueDate || t.dueDate <= todayStr) return false;
+        if (t.completed || !t.dueDate || t.dueDate <= today) return false;
       }
       if (activeTab === 'completed' && !t.completed) return false;
 
-      // General Filters (when in tasks tab)
+      // General Filters (applied in tasks tab or other tabs)
       if (activeTab === 'tasks') {
         if (categoryFilter !== 'ALL' && t.category !== categoryFilter) return false;
         if (priorityFilter !== 'ALL' && t.priority !== priorityFilter) return false;
         if (statusFilter === 'COMPLETED' && !t.completed) return false;
         if (statusFilter === 'PENDING' && t.completed) return false;
-        if (statusFilter === 'OVERDUE' && !isOverdue(t)) return false;
-        if (statusFilter === 'DUE_TODAY' && !isDueToday(t)) return false;
+        if (statusFilter === 'OVERDUE' && !isOverdue(t, today)) return false;
+        if (statusFilter === 'DUE_TODAY' && !isDueToday(t, today)) return false;
       }
 
       // Search Query
@@ -404,7 +308,7 @@ export default function App() {
       if (sortOrder === 'PRIORITY_DESC') {
         const diff = priorityRank(b.priority) - priorityRank(a.priority);
         if (diff !== 0) return diff;
-        return a.dueDate.localeCompare(b.dueDate);
+        return (a.dueDate || '').localeCompare(b.dueDate || '');
       }
       if (sortOrder === 'DUE_DATE_ASC') {
         if (!a.dueDate) return 1;
@@ -425,106 +329,243 @@ export default function App() {
 
   // Counts for sidebar badges
   const todayCount = useMemo(() => tasks.filter(t => !t.completed && isDueToday(t)).length, [tasks]);
-  const upcomingCount = useMemo(() => tasks.filter(t => !t.completed && t.dueDate && t.dueDate > '2026-10-14').length, [tasks]);
+  const upcomingCount = useMemo(() => tasks.filter(t => !t.completed && t.dueDate && t.dueDate > getTodayStr()).length, [tasks]);
   const completedCount = useMemo(() => tasks.filter(t => t.completed).length, [tasks]);
 
+  // Helper for priority badge colors
+  const getPriorityBadge = (p: Priority) => {
+    switch (p) {
+      case 'HIGH':
+        return 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/30';
+      case 'MEDIUM':
+        return 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/30';
+      case 'LOW':
+        return 'text-[#94A3B8] bg-[#94A3B8]/10 border-[#94A3B8]/30';
+    }
+  };
+
+  // Helper for category badge colors
+  const getCategoryBadge = (c: Category) => {
+    switch (c) {
+      case 'WORK':
+        return 'text-sky-400 bg-sky-500/10 border-sky-500/20';
+      case 'PROJECTS':
+        return 'text-purple-400 bg-purple-500/10 border-purple-500/20';
+      case 'COLLEGE':
+        return 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20';
+      case 'PERSONAL':
+        return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+      default:
+        return 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#111318] text-[#F1F5F9] flex flex-col font-sans selection:bg-[#F59E0B] selection:text-black">
+    <div className="min-h-screen bg-[#0F1117] text-[#F1F5F9] flex flex-col font-sans selection:bg-[#F59E0B] selection:text-black">
       
-      {/* 3-ZONE TOP BAR */}
-      <header className="h-16 border-b border-[#252A36] px-6 flex items-center justify-between gap-8 bg-[#161922] sticky top-0 z-30">
-        {/* Zone 1: Brand Wordmark */}
+      {/* Hidden File Input for CSV Import */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleImportCsvFile} 
+        accept=".csv,text/csv" 
+        className="hidden" 
+      />
+
+      {/* TOP NOTIFICATION TOAST */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 bg-[#1E2330] border border-[#F59E0B]/40 text-slate-100 text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 className="w-4 h-4 text-[#F59E0B]" />
+          <span>{notification}</span>
+        </div>
+      )}
+
+      {/* TOP HEADER BAR */}
+      <header className="h-16 border-b border-[#222838] px-4 sm:px-6 flex items-center justify-between gap-4 bg-[#141822] sticky top-0 z-30">
+        
+        {/* Brand Wordmark */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#EA580C] to-[#F59E0B] flex items-center justify-center font-bold text-white shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EA580C] to-[#F59E0B] flex items-center justify-center font-bold text-white shadow-md text-sm">
             TF
           </div>
-          <span className="text-lg font-bold tracking-tight text-white whitespace-nowrap">
-            TaskFlow
-          </span>
-          <span className="text-xs px-2 py-0.5 rounded border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B] font-mono hidden sm:inline">
-            C++17 + Java 17
-          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap">
+                TaskFlow
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B] font-medium hidden sm:inline">
+                Smart To-Do Manager
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="hidden md:flex items-center gap-5 text-sm font-medium text-slate-300">
+        {/* Desktop Primary Navigation (Strict 8 items) */}
+        <nav className="hidden xl:flex items-center gap-1 text-xs font-medium text-slate-300">
           <button 
             onClick={() => setActiveTab('dashboard')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'dashboard' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
             Dashboard
           </button>
           <button 
             onClick={() => setActiveTab('tasks')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'tasks' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'tasks' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
             All Tasks
           </button>
           <button 
             onClick={() => setActiveTab('today')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'today' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'today' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
-            Today {todayCount > 0 && `(${todayCount})`}
+            Today {todayCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#F59E0B]/20 text-[#F59E0B] font-mono">
+                {todayCount}
+              </span>
+            )}
+          </button>
+          <button 
+            onClick={() => setActiveTab('upcoming')}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'upcoming' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
+          >
+            Upcoming {upcomingCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
+                {upcomingCount}
+              </span>
+            )}
+          </button>
+          <button 
+            onClick={() => setActiveTab('completed')}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'completed' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
+          >
+            Completed
           </button>
           <button 
             onClick={() => setActiveTab('categories')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'categories' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'categories' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
             Categories
           </button>
           <button 
-            onClick={() => setActiveTab('viva')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'viva' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            onClick={() => setActiveTab('settings')}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'settings' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
-            Viva & IPC Hub
+            Settings
           </button>
           <button 
-            onClick={() => setActiveTab('code')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'code' ? 'text-[#F59E0B] font-semibold' : ''}`}
+            onClick={() => setActiveTab('about')}
+            className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'about' ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'hover:text-white hover:bg-[#1C2230]'}`}
           >
-            Code Explorer
-          </button>
-          <button 
-            onClick={() => setActiveTab('tests')}
-            className={`transition-colors whitespace-nowrap shrink-0 hover:text-white ${activeTab === 'tests' ? 'text-[#F59E0B] font-semibold' : ''}`}
-          >
-            Tests
+            About
           </button>
         </nav>
 
-        {/* Zone 3: Primary Action */}
+        {/* Right Section: Add Task & Administrator Profile */}
         <div className="flex items-center gap-3 shrink-0">
+          
+          {/* Prominent Add Task Button */}
           <button 
             onClick={() => openAddModal()}
-            className="px-4 py-2 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="px-3.5 sm:px-4 py-2 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add Task
+            <Plus className="w-4 h-4" />
+            <span>Add Task</span>
           </button>
+
+          {/* Administrator Profile Pill */}
+          <div 
+            onClick={() => setActiveTab('about')}
+            title="Administrator Profile: Dinesh Nikam"
+            className="hidden md:flex items-center gap-2.5 pl-3 border-l border-[#222838] cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#252C3D] to-[#363F56] border border-[#3E4862] flex items-center justify-center text-xs font-bold text-[#F59E0B] group-hover:border-[#F59E0B]/50 transition-colors">
+              DN
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-medium text-white group-hover:text-[#F59E0B] transition-colors leading-tight">
+                Dinesh Nikam
+              </p>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                System Administrator
+              </p>
+            </div>
+          </div>
+
+          {/* Mobile Menu Hamburger Toggle */}
+          <button 
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="xl:hidden p-2 text-slate-400 hover:text-white bg-[#1C2230] rounded-lg"
+            aria-label="Toggle Navigation Menu"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+
         </div>
       </header>
 
-      {/* MAIN LAYOUT */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto p-6 gap-6">
+      {/* MOBILE MENU DROPDOWN */}
+      {mobileMenuOpen && (
+        <div className="xl:hidden bg-[#141822] border-b border-[#222838] px-4 py-3 flex flex-col gap-1 text-xs">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#222838]">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-[#252C3D] flex items-center justify-center font-bold text-[10px] text-[#F59E0B]">
+                DN
+              </div>
+              <span className="font-semibold text-white">Dinesh Nikam · Administrator</span>
+            </div>
+            <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {[
+            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'tasks', label: `All Tasks (${tasks.length})` },
+            { id: 'today', label: `Today (${todayCount})` },
+            { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
+            { id: 'completed', label: `Completed (${completedCount})` },
+            { id: 'categories', label: 'Categories' },
+            { id: 'settings', label: 'Settings' },
+            { id: 'about', label: 'About' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as NavigationTab);
+                setMobileMenuOpen(false);
+              }}
+              className={`text-left px-3 py-2 rounded-lg transition-colors ${activeTab === tab.id ? 'bg-[#212738] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#1C2230]'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* MAIN CONTAINER */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto p-4 sm:p-6 gap-6">
         
-        {/* SIDEBAR NAVIGATION (Desktop) */}
-        <aside className="w-60 shrink-0 hidden lg:flex flex-col gap-6">
-          <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-slate-400 px-3 py-1 uppercase tracking-wider">VIEWS</span>
+        {/* DESKTOP SIDEBAR NAVIGATION */}
+        <aside className="w-60 shrink-0 hidden lg:flex flex-col gap-5">
+          
+          {/* Main Navigation Items */}
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-3 flex flex-col gap-1 shadow-sm">
+            <span className="text-[11px] font-semibold text-slate-400 px-3 py-1.5 uppercase tracking-wider">
+              NAVIGATION
+            </span>
             
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'dashboard' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'dashboard' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
-                <Layers className="w-4 h-4" />
+                <LayoutDashboard className="w-4 h-4 text-[#F59E0B]" />
                 Dashboard
               </span>
             </button>
 
             <button 
               onClick={() => setActiveTab('tasks')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'tasks' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'tasks' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4" />
@@ -535,14 +576,14 @@ export default function App() {
 
             <button 
               onClick={() => setActiveTab('today')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'today' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'today' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
                 <Clock className="w-4 h-4" />
                 Today
               </span>
               {todayCount > 0 && (
-                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#F59E0B]/20 text-[#F59E0B]">
+                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#F59E0B]/20 text-[#F59E0B] font-semibold">
                   {todayCount}
                 </span>
               )}
@@ -550,7 +591,7 @@ export default function App() {
 
             <button 
               onClick={() => setActiveTab('upcoming')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'upcoming' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'upcoming' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
                 <CalendarDays className="w-4 h-4" />
@@ -561,7 +602,7 @@ export default function App() {
 
             <button 
               onClick={() => setActiveTab('completed')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'completed' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'completed' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
                 <CheckCheck className="w-4 h-4" />
@@ -572,7 +613,7 @@ export default function App() {
 
             <button 
               onClick={() => setActiveTab('categories')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'categories' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'categories' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <span className="flex items-center gap-2.5">
                 <FolderKanban className="w-4 h-4" />
@@ -580,35 +621,11 @@ export default function App() {
               </span>
             </button>
 
-            <span className="text-[11px] font-semibold text-slate-400 px-3 pt-3 pb-1 uppercase tracking-wider">SYSTEM & VIVA</span>
-
-            <button 
-              onClick={() => setActiveTab('viva')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'viva' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
-            >
-              <Terminal className="w-4 h-4" />
-              Viva & IPC Hub
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('code')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'code' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
-            >
-              <Code2 className="w-4 h-4" />
-              Code Explorer
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('tests')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'tests' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Automated Tests
-            </button>
+            <div className="pt-2 mt-1 border-t border-[#262C3D]" />
 
             <button 
               onClick={() => setActiveTab('settings')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'settings' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'settings' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <SettingsIcon className="w-4 h-4" />
               Settings
@@ -616,81 +633,78 @@ export default function App() {
 
             <button 
               onClick={() => setActiveTab('about')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'about' ? 'bg-[#252C3D] text-[#F59E0B]' : 'text-slate-300 hover:bg-[#252C3D]/60'}`}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${activeTab === 'about' ? 'bg-[#222838] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#222838]/60 hover:text-white'}`}
             >
               <Info className="w-4 h-4" />
-              About Project
+              About
             </button>
           </div>
 
-          {/* Quick Engine Status Card */}
-          <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-400">ENGINE STATUS</span>
-              <span className="text-[#22C55E] flex items-center gap-1 font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-                C++ IPC Online
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Native C++17 engine linked via <code className="text-slate-300 font-mono">ProcessBuilder</code> standard streams.
+          {/* Data Export & Import Card */}
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-4 flex flex-col gap-2.5 text-xs shadow-sm">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">DATA PERSISTENCE</span>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              Standard RFC 4180 CSV export and import.
             </p>
-            <div className="pt-2 border-t border-[#2A3142] flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2 pt-1">
               <button 
-                onClick={runIpcPing}
-                disabled={isIpcRunning}
-                className="w-full py-1.5 text-xs font-medium text-slate-200 bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                onClick={handleDownloadCsv}
+                className="w-full py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                title="Export all tasks as CSV"
               >
-                <Terminal className="w-3.5 h-3.5 text-[#F59E0B]" />
-                {isIpcRunning ? 'Pinging C++...' : 'Ping C++ Engine'}
+                <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
+                Export
               </button>
               <button 
-                onClick={restoreSampleTasks}
-                className="w-full py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-transparent hover:bg-[#252C3D] rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                title="Import tasks from CSV file"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Reset Demo Tasks
+                <Upload className="w-3.5 h-3.5 text-[#F59E0B]" />
+                Import
               </button>
             </div>
           </div>
 
-          {/* Local Storage Export */}
-          <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4 flex flex-col gap-2 text-xs">
-            <span className="font-semibold text-slate-400">DATA PERSISTENCE</span>
-            <span className="text-slate-300 font-mono">data/tasks.csv (RFC 4180)</span>
-            <button 
-              onClick={handleDownloadCsv}
-              className="mt-1 w-full py-1.5 text-xs font-medium text-white bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
-              Export tasks.csv
-            </button>
+          {/* Administrator Profile Card */}
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-4 flex items-center gap-3 shadow-sm">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#252C3D] to-[#3B4663] border border-[#445070] flex items-center justify-center text-xs font-bold text-[#F59E0B] shrink-0">
+              DN
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate">Dinesh Nikam</p>
+              <p className="text-[11px] text-slate-400 truncate">System Administrator</p>
+            </div>
           </div>
+
         </aside>
 
-        {/* MAIN CONTENT VIEWPORT */}
+        {/* MAIN VIEWPORT */}
         <main className="flex-1 flex flex-col gap-6 overflow-hidden">
           
-          {/* TAB 1: DASHBOARD VIEW */}
+          {/* ==================================================================== */}
+          {/* 1. DASHBOARD VIEW */}
+          {/* ==================================================================== */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col gap-6">
-              {/* Welcome Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6">
+              
+              {/* Header Greeting & Add Task Banner */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                 <div>
                   <h1 className="text-2xl font-bold text-white tracking-tight">
-                    Academic Dashboard
+                    {greeting}, Dinesh!
                   </h1>
                   <p className="text-sm text-slate-400 mt-1">
-                    C++17 algorithmic engine & Java Swing to-do manager for college presentation.
+                    Plan your day, one task at a time.
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button 
-                    onClick={restoreSampleTasks}
-                    className="px-3.5 py-2 text-xs font-medium text-slate-200 bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors flex items-center gap-2"
+                    onClick={handleDownloadCsv}
+                    className="px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center gap-1.5"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Load Demo Data
+                    <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
+                    Export CSV
                   </button>
                   <button 
                     onClick={() => openAddModal()}
@@ -702,47 +716,72 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 4 KPI CARDS ROW */}
+              {/* 4 Summary Cards (Total, Completed, Pending, Overdue) */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-slate-400 tracking-wider">TOTAL TASKS</span>
+                
+                {/* Total Tasks */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-1 shadow-sm">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    TOTAL TASKS
+                  </span>
                   <span className="text-3xl font-bold font-mono tabular-nums text-white mt-1">
                     {stats.totalTasks}
                   </span>
-                  <span className="text-xs text-slate-500 mt-2">Tracked in data/tasks.csv</span>
+                  <span className="text-xs text-slate-400 mt-1">
+                    All active & archived tasks
+                  </span>
                 </div>
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-slate-400 tracking-wider">COMPLETED</span>
+
+                {/* Completed Tasks */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-1 shadow-sm">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    COMPLETED
+                  </span>
                   <span className="text-3xl font-bold font-mono tabular-nums text-[#22C55E] mt-1">
                     {stats.completedTasks}
                   </span>
-                  <span className="text-xs text-slate-500 mt-2">Verified completed</span>
+                  <span className="text-xs text-slate-400 mt-1">
+                    Verified completed deliverables
+                  </span>
                 </div>
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-slate-400 tracking-wider">PENDING</span>
+
+                {/* Pending Tasks */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-1 shadow-sm">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    PENDING
+                  </span>
                   <span className="text-3xl font-bold font-mono tabular-nums text-[#F59E0B] mt-1">
                     {stats.pendingTasks}
                   </span>
-                  <span className="text-xs text-slate-500 mt-2">Active backlog</span>
+                  <span className="text-xs text-slate-400 mt-1">
+                    Tasks awaiting completion
+                  </span>
                 </div>
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-slate-400 tracking-wider">OVERDUE</span>
+
+                {/* Overdue Tasks */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-1 shadow-sm">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    OVERDUE
+                  </span>
                   <span className={`text-3xl font-bold font-mono tabular-nums mt-1 ${stats.overdueTasks > 0 ? 'text-[#EF4444]' : 'text-slate-400'}`}>
                     {stats.overdueTasks}
                   </span>
-                  <span className="text-xs text-slate-500 mt-2">Past target deadline</span>
+                  <span className="text-xs text-slate-400 mt-1">
+                    Past target due date
+                  </span>
                 </div>
+
               </div>
 
-              {/* VELOCITY PROGRESS BANNER */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-3">
+              {/* Overall Completion Progress */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-3 shadow-sm">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-semibold text-white">Sprint Completion Velocity</span>
+                  <span className="font-semibold text-white">Overall Completion Progress</span>
                   <span className="font-mono tabular-nums text-[#F59E0B] font-bold">
                     {stats.completionPercentage}% Complete
                   </span>
                 </div>
-                <div className="w-full bg-[#111318] rounded-full h-3 overflow-hidden border border-[#2A3142]">
+                <div className="w-full bg-[#0F1117] rounded-full h-3 overflow-hidden border border-[#262C3D]">
                   <div 
                     className="bg-gradient-to-r from-[#EA580C] to-[#F59E0B] h-full transition-all duration-300"
                     style={{ width: `${stats.completionPercentage}%` }}
@@ -750,66 +789,92 @@ export default function App() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>{stats.completedTasks} of {stats.totalTasks} deliverables finished</span>
-                  <span>{stats.highPriorityPending} high-priority item(s) pending</span>
+                  <span>{stats.highPriorityPending} high-priority pending item(s)</span>
                 </div>
               </div>
 
-              {/* TWO COLUMN SPLIT: HIGH PRIORITY & UPCOMING DEADLINES */}
+              {/* Main 2-Column Content Grid: Today's Tasks & Upcoming Deadlines */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* High-Priority Tasks */}
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-4">
+                {/* Today's Tasks Panel */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-white text-sm">High-Priority Tasks (Calculated by C++)</h3>
-                    <span className="text-xs text-slate-400 font-mono">{stats.highPriorityPending} pending</span>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-[#F59E0B]" />
+                      <h3 className="font-bold text-white text-sm">Today's Tasks</h3>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('today')}
+                      className="text-xs text-[#F59E0B] hover:underline"
+                    >
+                      View all ({todayCount})
+                    </button>
                   </div>
+                  
                   <div className="flex flex-col gap-2.5">
-                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').slice(0, 4).map(t => (
+                    {tasks.filter(t => isDueToday(t)).slice(0, 4).map(t => (
                       <div 
                         key={t.id} 
-                        className="p-3 bg-[#111318] border border-[#2A3142] rounded-lg flex items-center justify-between gap-3 hover:border-[#384259] transition-colors"
+                        className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
                       >
                         <div className="flex items-center gap-3 overflow-hidden">
                           <button 
                             onClick={() => toggleTask(t.id)} 
                             className="text-slate-400 hover:text-[#22C55E] transition-colors shrink-0"
+                            title={t.completed ? "Reopen task" : "Mark complete"}
                           >
-                            <Circle className="w-4 h-4" />
+                            {t.completed ? (
+                              <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
+                            ) : (
+                              <Circle className="w-4 h-4" />
+                            )}
                           </button>
                           <div className="truncate">
-                            <p className="text-xs font-medium text-white truncate">{t.title}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">{t.category} · Due {t.dueDate || 'No date'}</p>
+                            <p className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-400' : 'text-white'}`}>
+                              {t.title}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {t.category} · Due Today
+                            </p>
                           </div>
                         </div>
-                        <span className="text-[10px] font-semibold text-[#EA580C] px-2 py-0.5 rounded bg-[#EA580C]/10 border border-[#EA580C]/20 shrink-0">
-                          HIGH
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border shrink-0 ${getPriorityBadge(t.priority)}`}>
+                          {t.priority}
                         </span>
                       </div>
                     ))}
-                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').length === 0 && (
-                      <p className="text-xs text-slate-500 py-4 text-center">No high-priority tasks pending.</p>
+                    {tasks.filter(t => isDueToday(t)).length === 0 && (
+                      <div className="py-8 text-center flex flex-col items-center justify-center">
+                        <CheckCircle2 className="w-8 h-8 text-slate-600 mb-1" />
+                        <p className="text-xs text-slate-400">No tasks due today. You are all caught up!</p>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Upcoming Deadlines */}
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-4">
+                {/* Upcoming Deadlines Panel */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-white text-sm">Upcoming Deadlines</h3>
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-[#F59E0B]" />
+                      <h3 className="font-bold text-white text-sm">Upcoming Deadlines</h3>
+                    </div>
                     <button 
                       onClick={() => setActiveTab('upcoming')}
                       className="text-xs text-[#F59E0B] hover:underline"
                     >
-                      View all
+                      View all ({upcomingCount})
                     </button>
                   </div>
+
                   <div className="flex flex-col gap-2.5">
-                    {tasks.filter(t => !t.completed && t.dueDate).sort((a,b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 4).map(t => {
-                      const overdue = isOverdue(t);
-                      return (
+                    {tasks.filter(t => !t.completed && t.dueDate && t.dueDate > getTodayStr())
+                      .sort((a,b) => a.dueDate.localeCompare(b.dueDate))
+                      .slice(0, 4)
+                      .map(t => (
                         <div 
                           key={t.id} 
-                          className="p-3 bg-[#111318] border border-[#2A3142] rounded-lg flex items-center justify-between gap-3 hover:border-[#384259] transition-colors"
+                          className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
                         >
                           <div className="flex items-center gap-3 overflow-hidden">
                             <button 
@@ -823,49 +888,155 @@ export default function App() {
                               <p className="text-[11px] text-slate-400 mt-0.5">{t.category}</p>
                             </div>
                           </div>
-                          <span className={`text-[11px] font-mono shrink-0 ${overdue ? 'text-[#EF4444] font-semibold' : 'text-slate-300'}`}>
-                            {overdue ? `Overdue (${t.dueDate})` : t.dueDate}
+                          <span className="text-[11px] font-mono text-slate-300 shrink-0">
+                            {t.dueDate}
                           </span>
                         </div>
-                      );
-                    })}
+                      ))}
+                    {tasks.filter(t => !t.completed && t.dueDate && t.dueDate > getTodayStr()).length === 0 && (
+                      <div className="py-8 text-center flex flex-col items-center justify-center">
+                        <Calendar className="w-8 h-8 text-slate-600 mb-1" />
+                        <p className="text-xs text-slate-400">No upcoming tasks scheduled.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
               </div>
+
+              {/* Second 2-Column Row: High Priority & Recent Tasks */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* High-Priority Tasks Panel */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-[#EF4444]" />
+                      <h3 className="font-bold text-white text-sm">High Priority Tasks</h3>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">
+                      {stats.highPriorityPending} pending
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').slice(0, 4).map(t => (
+                      <div 
+                        key={t.id} 
+                        className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <button 
+                            onClick={() => toggleTask(t.id)} 
+                            className="text-slate-400 hover:text-[#22C55E] transition-colors shrink-0"
+                          >
+                            <Circle className="w-4 h-4" />
+                          </button>
+                          <div className="truncate">
+                            <p className="text-xs font-medium text-white truncate">{t.title}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {t.category} · Due {t.dueDate || 'No date'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-semibold text-[#EF4444] px-2 py-0.5 rounded bg-[#EF4444]/10 border border-[#EF4444]/30 shrink-0">
+                          HIGH
+                        </span>
+                      </div>
+                    ))}
+                    {tasks.filter(t => !t.completed && t.priority === 'HIGH').length === 0 && (
+                      <div className="py-6 text-center text-xs text-slate-400">
+                        No high priority tasks pending.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent Tasks */}
+                <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-white text-sm">Recent Tasks</h3>
+                    <button 
+                      onClick={() => setActiveTab('tasks')}
+                      className="text-xs text-[#F59E0B] hover:underline"
+                    >
+                      View All
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    {tasks.slice(0, 4).map(t => (
+                      <div 
+                        key={t.id} 
+                        className="p-3 bg-[#10131C] border border-[#262C3D] rounded-lg flex items-center justify-between gap-3 hover:border-[#38425A] transition-colors"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <button 
+                            onClick={() => toggleTask(t.id)} 
+                            className="text-slate-400 hover:text-[#22C55E] transition-colors shrink-0"
+                          >
+                            {t.completed ? (
+                              <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
+                            ) : (
+                              <Circle className="w-4 h-4" />
+                            )}
+                          </button>
+                          <div className="truncate">
+                            <p className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-400' : 'text-white'}`}>
+                              {t.title}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {t.category} · {t.dueDate || 'No due date'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border shrink-0 ${getPriorityBadge(t.priority)}`}>
+                          {t.priority}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           )}
 
-          {/* TAB 2, 3, 4, 5: TASKS LISTS (All Tasks, Today, Upcoming, Completed) */}
+          {/* ==================================================================== */}
+          {/* 2. TASK LIST VIEWS (All Tasks, Today, Upcoming, Completed) */}
+          {/* ==================================================================== */}
           {(activeTab === 'tasks' || activeTab === 'today' || activeTab === 'upcoming' || activeTab === 'completed') && (
             <div className="flex flex-col gap-6">
               
-              {/* Top Controls Toolbar */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-4">
+              {/* Header & Controls Toolbar */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+                
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold text-white capitalize">
-                      {activeTab === 'today' && "Tasks Due Today"}
+                    <h2 className="text-xl font-bold text-white capitalize">
+                      {activeTab === 'today' && "Today's Tasks"}
                       {activeTab === 'upcoming' && "Upcoming Deadlines"}
-                      {activeTab === 'completed' && "Completed Task Archive"}
-                      {activeTab === 'tasks' && "All Task Records"}
+                      {activeTab === 'completed' && "Completed Tasks"}
+                      {activeTab === 'tasks' && "All Tasks"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {displayTasks.length} task(s) matching criteria. Stored in RFC 4180 CSV format.
+                      Showing {displayTasks.length} task(s). Stored securely in RFC 4180 format.
                     </p>
                   </div>
+
                   <div className="flex items-center gap-2">
-                    {completedCount > 0 && (
+                    {completedCount > 0 && (activeTab === 'completed' || activeTab === 'tasks') && (
                       <button 
                         onClick={clearCompleted}
-                        className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors"
                       >
                         Clear Completed ({completedCount})
                       </button>
                     )}
                     <button 
                       onClick={() => openAddModal()}
-                      className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Add Task
@@ -873,17 +1044,18 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Filter & Search Bar */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2 border-t border-[#2A3142]">
-                  {/* Search input */}
+                {/* Filter and Search Bar */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-[#262C3D]">
+                  
+                  {/* Search Input */}
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input 
                       type="text"
-                      placeholder="Search title or notes..."
+                      placeholder="Search title or description..."
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
-                      className="w-full bg-[#111318] border border-[#2A3142] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
+                      className="w-full bg-[#0F1117] border border-[#262C3D] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
                     />
                   </div>
 
@@ -891,13 +1063,13 @@ export default function App() {
                   <select 
                     value={categoryFilter}
                     onChange={e => setCategoryFilter(e.target.value)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
                   >
                     <option value="ALL">All Categories</option>
-                    <option value="COLLEGE">College</option>
-                    <option value="PERSONAL">Personal</option>
                     <option value="WORK">Work</option>
                     <option value="PROJECTS">Projects</option>
+                    <option value="COLLEGE">College</option>
+                    <option value="PERSONAL">Personal</option>
                     <option value="OTHER">Other</option>
                   </select>
 
@@ -905,7 +1077,7 @@ export default function App() {
                   <select 
                     value={priorityFilter}
                     onChange={e => setPriorityFilter(e.target.value)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
                   >
                     <option value="ALL">All Priorities</option>
                     <option value="HIGH">High Priority</option>
@@ -917,7 +1089,7 @@ export default function App() {
                   <select 
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
                     disabled={activeTab !== 'tasks'}
                   >
                     <option value="ALL">All Statuses</option>
@@ -931,23 +1103,26 @@ export default function App() {
                   <select 
                     value={sortOrder}
                     onChange={e => setSortOrder(e.target.value)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#F59E0B]"
                   >
                     <option value="PRIORITY_DESC">Sort: Priority (High to Low)</option>
                     <option value="DUE_DATE_ASC">Sort: Due Date (Nearest First)</option>
                     <option value="DUE_DATE_DESC">Sort: Due Date (Furthest First)</option>
-                    <option value="CREATED_AT_DESC">Sort: Newest First</option>
                     <option value="TITLE_ASC">Sort: Title (A-Z)</option>
+                    <option value="CREATED_AT_DESC">Sort: Newest First</option>
                   </select>
+
                 </div>
+
               </div>
 
-              {/* Tasks List Table / Cards */}
+              {/* Tasks List */}
               <div className="flex flex-col gap-3">
                 {displayTasks.length === 0 ? (
-                  <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-12 text-center flex flex-col items-center justify-center">
-                    <p className="text-sm font-semibold text-slate-300">No tasks found matching current filters.</p>
-                    <p className="text-xs text-slate-500 mt-1">Try broadening your search or click '+ Add Task' to create one.</p>
+                  <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-12 text-center flex flex-col items-center justify-center shadow-sm">
+                    <CheckCircle2 className="w-10 h-10 text-slate-600 mb-2" />
+                    <p className="text-sm font-semibold text-slate-300">No tasks found matching criteria.</p>
+                    <p className="text-xs text-slate-400 mt-1">Try modifying your search or click '+ Add Task' to create one.</p>
                   </div>
                 ) : (
                   displayTasks.map(task => {
@@ -955,7 +1130,7 @@ export default function App() {
                     return (
                       <div 
                         key={task.id}
-                        className={`bg-[#1A1E29] border rounded-xl p-4 flex items-center justify-between gap-4 transition-all ${task.completed ? 'border-[#2A3142]/60 opacity-75' : 'border-[#2A3142] hover:border-[#3A455E]'}`}
+                        className={`bg-[#161924] border rounded-xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all shadow-sm ${task.completed ? 'border-[#262C3D]/60 opacity-70' : 'border-[#262C3D] hover:border-[#38425A]'}`}
                       >
                         {/* Left: Completion Checkbox & Details */}
                         <div className="flex items-start gap-3.5 flex-1 min-w-0">
@@ -970,25 +1145,30 @@ export default function App() {
                               <Circle className="w-5 h-5" />
                             )}
                           </button>
+
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className={`text-sm font-semibold ${task.completed ? 'line-through text-slate-400' : 'text-white'}`}>
                                 {task.title}
                               </span>
                             </div>
+
                             {task.description && (
-                              <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                                 {task.description}
                               </p>
                             )}
-                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
-                              <span>{task.category}</span>
-                              <span aria-hidden="true">·</span>
-                              <span className={task.priority === 'HIGH' ? 'text-[#EA580C] font-semibold' : ''}>
-                                Priority: {task.priority}
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-2.5 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded border text-[11px] font-medium ${getCategoryBadge(task.category)}`}>
+                                {task.category}
                               </span>
                               <span aria-hidden="true">·</span>
-                              <span className={overdue ? 'text-[#EF4444] font-semibold' : ''}>
+                              <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${getPriorityBadge(task.priority)}`}>
+                                {task.priority} Priority
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className={`text-xs ${overdue ? 'text-[#EF4444] font-semibold' : 'text-slate-300'}`}>
                                 {overdue ? `Overdue (${task.dueDate})` : `Due: ${task.dueDate || 'None'}`}
                               </span>
                             </div>
@@ -996,23 +1176,23 @@ export default function App() {
                         </div>
 
                         {/* Right: Actions */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button 
                             onClick={() => toggleTask(task.id)}
-                            className="px-2.5 py-1 text-xs rounded-lg border border-[#2A3142] text-slate-300 hover:text-white hover:bg-[#252C3D] transition-colors"
+                            className="px-2.5 py-1 text-xs rounded-lg border border-[#262C3D] text-slate-300 hover:text-white hover:bg-[#222838] transition-colors hidden sm:inline-block"
                           >
                             {task.completed ? "Reopen" : "Complete"}
                           </button>
                           <button 
                             onClick={() => openEditModal(task)}
-                            className="p-1.5 text-slate-400 hover:text-white hover:bg-[#252C3D] rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-[#222838] rounded-lg transition-colors"
                             title="Edit Task"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button 
                             onClick={() => deleteTask(task)}
-                            className="p-1.5 text-slate-400 hover:text-[#EF4444] hover:bg-[#252C3D] rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-[#EF4444] hover:bg-[#222838] rounded-lg transition-colors"
                             title="Delete Task"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1027,17 +1207,20 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 6: CATEGORIES VIEW */}
+          {/* ==================================================================== */}
+          {/* 3. CATEGORIES VIEW */}
+          {/* ==================================================================== */}
           {activeTab === 'categories' && (
             <div className="flex flex-col gap-6">
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                 <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <FolderKanban className="w-5 h-5 text-[#F59E0B]" />
-                    Task Categories Hub
+                    Task Categories
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    Group tasks into academic and personal buckets for streamlined productivity.
+                    Organize and manage your task distribution across work and personal domains.
                   </p>
                 </div>
                 <button 
@@ -1050,7 +1233,7 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(['COLLEGE', 'PERSONAL', 'WORK', 'PROJECTS', 'OTHER'] as Category[]).map(cat => {
+                {(['WORK', 'PROJECTS', 'COLLEGE', 'PERSONAL', 'OTHER'] as Category[]).map(cat => {
                   const catTasks = tasks.filter(t => t.category === cat);
                   const catCompleted = catTasks.filter(t => t.completed).length;
                   const catPending = catTasks.length - catCompleted;
@@ -1059,14 +1242,14 @@ export default function App() {
                   return (
                     <div 
                       key={cat}
-                      className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3A455E] transition-colors"
+                      className="bg-[#161924] border border-[#262C3D] rounded-xl p-5 flex flex-col gap-4 hover:border-[#38425A] transition-colors shadow-sm"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-white text-sm">{cat}</span>
                         <span className="font-mono text-xs text-[#F59E0B] font-semibold">{catPct}% Done</span>
                       </div>
 
-                      <div className="w-full bg-[#111318] rounded-full h-2 overflow-hidden border border-[#2A3142]">
+                      <div className="w-full bg-[#0F1117] rounded-full h-2 overflow-hidden border border-[#262C3D]">
                         <div 
                           className="bg-gradient-to-r from-[#EA580C] to-[#F59E0B] h-full transition-all duration-300"
                           style={{ width: `${catPct}%` }}
@@ -1078,19 +1261,19 @@ export default function App() {
                         <span>{catPending} pending</span>
                       </div>
 
-                      <div className="pt-2 border-t border-[#2A3142] flex items-center gap-2">
+                      <div className="pt-2 border-t border-[#262C3D] flex items-center gap-2">
                         <button 
                           onClick={() => {
                             setCategoryFilter(cat);
                             setActiveTab('tasks');
                           }}
-                          className="flex-1 py-1.5 text-xs font-medium text-slate-200 bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors text-center"
+                          className="flex-1 py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors text-center"
                         >
                           View Tasks ({catTasks.length})
                         </button>
                         <button 
                           onClick={() => openAddModal(cat)}
-                          className="p-1.5 text-slate-300 hover:text-white bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors"
+                          className="p-1.5 text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors"
                           title={`Add ${cat} Task`}
                         >
                           <Plus className="w-4 h-4" />
@@ -1100,320 +1283,44 @@ export default function App() {
                   );
                 })}
               </div>
-            </div>
-          )}
-
-          {/* TAB 7: VIVA & IPC HUB */}
-          {activeTab === 'viva' && (
-            <div className="flex flex-col gap-6">
-              
-              {/* IPC Interactive Terminal Card */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <Terminal className="w-5 h-5 text-[#F59E0B]" />
-                      Live C++ Engine (ProcessBuilder IPC) Diagnostic Console
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Direct stdin/stdout JSON protocol stream communicating between Java and the compiled C++17 binary.
-                    </p>
-                  </div>
-                  <button 
-                    onClick={runIpcPing}
-                    disabled={isIpcRunning}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors shadow-sm flex items-center gap-2"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isIpcRunning ? 'animate-spin' : ''}`} />
-                    Execute Live C++ Ping
-                  </button>
-                </div>
-
-                {/* Terminal logs window */}
-                <div className="bg-[#0B0D13] border border-[#252A36] rounded-lg p-4 font-mono text-xs text-slate-300 flex flex-col gap-2 max-h-60 overflow-y-auto">
-                  <div className="text-slate-500">// TaskFlow C++17 IPC Protocol Stream — stdin/stdout monitor</div>
-                  {ipcLogs.map((log, idx) => (
-                    <div key={idx} className="flex flex-col gap-1 pb-2 border-b border-slate-800/60 last:border-0">
-                      <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                        <span>[{log.timestamp}] ACTION: {log.action}</span>
-                        <span className="text-[#22C55E]">{log.latencyMs} ms latency</span>
-                      </div>
-                      <div className="text-[#F59E0B]">
-                        &gt; stdin: <span className="text-slate-300">{log.requestPayload}</span>
-                      </div>
-                      <div className="text-[#22C55E]">
-                        &lt; stdout: <span className="text-slate-200">{log.responsePayload}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3-Minute Presentation Demo Script */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-[#F59E0B]" />
-                  3-Minute College Presentation Walkthrough Script
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                  <div className="bg-[#111318] border border-[#2A3142] p-4 rounded-lg flex flex-col gap-2">
-                    <span className="text-[#F59E0B] font-semibold">1. RATIONALE (0:00 - 0:45)</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      "TaskFlow pairs C++17 algorithmic execution with Java 17 Swing GUI. This demonstrates practical multi-language architecture rather than a single monolithic program."
-                    </p>
-                  </div>
-                  <div className="bg-[#111318] border border-[#2A3142] p-4 rounded-lg flex flex-col gap-2">
-                    <span className="text-[#F59E0B] font-semibold">2. LIVE DEMO (0:45 - 2:00)</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      "Click '+ Add Task' and add an assignment. Watch the C++ engine immediately recompute total, pending, and velocity percentages without page reloading."
-                    </p>
-                  </div>
-                  <div className="bg-[#111318] border border-[#2A3142] p-4 rounded-lg flex flex-col gap-2">
-                    <span className="text-[#F59E0B] font-semibold">3. PROVE IPC (2:00 - 3:00)</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      "Open the Viva Hub and click 'Execute Live C++ Ping'. Java invokes ProcessBuilder, piping JSON over stdin and receiving the result via stdout in under 5ms."
-                    </p>
-                  </div>
-                  <div className="bg-[#111318] border border-[#2A3142] p-4 rounded-lg flex flex-col gap-2">
-                    <span className="text-[#F59E0B] font-semibold">4. PERSISTENCE (3:00 - 3:45)</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      "Inspect data/tasks.csv to show RFC 4180 quote escaping. Atomic file swaps guarantee data is never corrupted during sudden power loss."
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Likely Viva Questions & Answers */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
-                    College Viva Questions & Immediate Answers (Searchable)
-                  </h3>
-                  <input 
-                    type="text"
-                    placeholder="Filter viva questions..."
-                    value={vivaSearch}
-                    onChange={e => setVivaSearch(e.target.value)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B] sm:w-64"
-                  />
-                </div>
-                <div className="flex flex-col gap-3">
-                  {[
-                    {
-                      q: "Why did you choose both C++ and Java instead of building the entire project in one language?",
-                      a: "C++ provides high-performance, deterministic execution speed and low memory overhead without garbage collection pauses, making it ideal for core algorithmic processing (sorting, filtering, deadline analysis). Java provides robust Object-Oriented design and an out-of-the-box cross-platform Graphical User Interface (Swing). Combining them demonstrates practical multi-language systems integration."
-                    },
-                    {
-                      q: "How do Java and C++ communicate in TaskFlow?",
-                      a: "They communicate via Inter-Process Communication (IPC) using standard input (stdin) and standard output (stdout) streams. Java launches the C++ binary using java.lang.ProcessBuilder, streams a structured JSON command payload into the process's standard input, and reads the computed JSON result from standard output."
-                    },
-                    {
-                      q: "What is ProcessBuilder in Java, and how does it differ from Runtime.getRuntime().exec()?",
-                      a: "ProcessBuilder is a modern Java API (introduced in Java 5) for managing operating system processes. Unlike Runtime.exec(), ProcessBuilder allows fine-grained control over process working directories, environment variables, standard I/O redirection, and merged error streams (redirectErrorStream(true))."
-                    },
-                    {
-                      q: "Why use ProcessBuilder standard I/O rather than Java Native Interface (JNI)?",
-                      a: "JNI binds native memory directly into the JVM. A segmentation fault in C++ crashes the entire application. Standard I/O with JSON creates true process isolation and testable decoupled interfaces."
-                    },
-                    {
-                      q: "How does the C++ engine calculate task priority and sorting?",
-                      a: "TaskEngine uses std::sort with custom comparison lambdas. Priorities are mapped to numeric ranks (High=3, Medium=2, Low=1). Tie-breaks are resolved by ISO 8601 deadline dates."
-                    },
-                    {
-                      q: "How does C++ detect overdue tasks without external time libraries?",
-                      a: "Dates are formatted in ISO 8601 (YYYY-MM-DD). Lexicographical string comparison (task.dueDate < todayDate) is mathematically equivalent to chronological comparison, executing in O(1) time without timezone library bloat."
-                    },
-                    {
-                      q: "How do you prevent CSV file corruption when users type commas in descriptions?",
-                      a: "We implemented an RFC 4180 compliant state-machine parser in Java. Fields containing commas, quotation marks, or newlines are enclosed in quotes, and internal quotes are doubled (\"\")."
-                    },
-                    {
-                      q: "What are atomic file writes, and why are they used?",
-                      a: "If a program crashes or loses power while writing directly to tasks.csv, the file can be truncated or corrupted. TaskFlow writes to a temporary file (tasks.csv.tmp) first, and upon successful write, performs an atomic filesystem replace (Files.move), ensuring complete data integrity."
-                    },
-                    {
-                      q: "What happens if the C++ binary is missing?",
-                      a: "CppEngineClient implements a graceful failover fallback to Java calculations, logging a clear warning rather than letting the application crash."
-                    }
-                  ].filter(item => {
-                    if (!vivaSearch.trim()) return true;
-                    const q = vivaSearch.toLowerCase();
-                    return item.q.toLowerCase().includes(q) || item.a.toLowerCase().includes(q);
-                  }).map((viva, idx) => (
-                    <div key={idx} className="bg-[#111318] border border-[#2A3142] rounded-lg p-4 flex flex-col gap-1.5">
-                      <p className="text-xs font-semibold text-[#F59E0B]">Q: {viva.q}</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">A: {viva.a}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
             </div>
           )}
 
-          {/* TAB 8: CODE EXPLORER */}
-          {activeTab === 'code' && (
-            <div className="flex flex-col gap-4">
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-white">TaskFlow Desktop Source Code Repository</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Explore C++, Java, Bat scripts, and academic documentation files.</p>
-                </div>
-                <button 
-                  onClick={handleDownloadCsv}
-                  className="px-3 py-1.5 text-xs font-medium text-slate-200 bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download tasks.csv
-                </button>
-              </div>
-
-              {/* Code Viewer Layout */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* File List */}
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4 flex flex-col gap-2 max-h-[600px] overflow-y-auto">
-                  <span className="text-xs font-semibold text-slate-400 mb-1">PROJECT FILES</span>
-                  {SOURCE_FILES.map(file => (
-                    <button 
-                      key={file.path}
-                      onClick={() => setSelectedFile(file)}
-                      className={`text-left px-3 py-2 rounded-lg text-xs font-mono transition-colors flex items-center justify-between ${selectedFile.path === file.path ? 'bg-[#252C3D] text-[#F59E0B] font-semibold' : 'text-slate-300 hover:bg-[#252C3D]/50'}`}
-                    >
-                      <span className="truncate">{file.name}</span>
-                      <span className="text-[10px] text-slate-500 uppercase">{file.category.split(' ')[0]}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Code Window */}
-                <div className="md:col-span-2 bg-[#0E1015] border border-[#2A3142] rounded-xl p-4 flex flex-col gap-2 max-h-[600px] overflow-hidden">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#252A36]">
-                    <span className="text-xs font-mono text-slate-400">{selectedFile.path}</span>
-                    <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                      {selectedFile.language}
-                    </span>
-                  </div>
-                  <pre className="flex-1 overflow-auto p-2 text-xs font-mono text-slate-200 leading-relaxed">
-                    <code>{selectedFile.content}</code>
-                  </pre>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* TAB 9: AUTOMATED TESTS VIEW */}
-          {activeTab === 'tests' && (
-            <div className="flex flex-col gap-6">
-              
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-[#22C55E]" />
-                    Dual-Language Verification Test Suite
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Automated unit testing for C++ ranking/sorting algorithms and Java RFC 4180 CSV serialization.
-                  </p>
-                </div>
-                <button 
-                  onClick={handleRunTests}
-                  disabled={testResults.running}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors shadow-sm flex items-center gap-2"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${testResults.running ? 'animate-spin' : ''}`} />
-                  {testResults.running ? 'Running Tests...' : 'Re-Run All Tests'}
-                </button>
-              </div>
-
-              {/* Test summary card */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4">
-                  <span className="text-xs text-slate-400">TOTAL TESTS</span>
-                  <p className="text-2xl font-bold font-mono text-white mt-1">10</p>
-                </div>
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4">
-                  <span className="text-xs text-slate-400">PASSED TESTS</span>
-                  <p className="text-2xl font-bold font-mono text-[#22C55E] mt-1">10</p>
-                </div>
-                <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-4">
-                  <span className="text-xs text-slate-400">SUCCESS RATE</span>
-                  <p className="text-2xl font-bold font-mono text-[#F59E0B] mt-1">100%</p>
-                </div>
-              </div>
-
-              {/* Terminal Log Output if available */}
-              {testResults.outputLog && (
-                <div className="bg-[#0B0D13] border border-[#252A36] rounded-xl p-4 font-mono text-xs text-slate-300 flex flex-col gap-2 max-h-48 overflow-y-auto">
-                  <span className="text-slate-500">// Execution output from 'make test'</span>
-                  <pre className="text-slate-300 leading-relaxed whitespace-pre-wrap">{testResults.outputLog}</pre>
-                </div>
-              )}
-
-              {/* Test Items Table */}
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-[#2A3142] text-xs font-semibold text-slate-400 grid grid-cols-12">
-                  <span className="col-span-7">TEST CASE NAME</span>
-                  <span className="col-span-3">SUITE</span>
-                  <span className="col-span-2 text-right">STATUS</span>
-                </div>
-                <div className="divide-y divide-[#2A3142]">
-                  {testResults.items.map((t, idx) => (
-                    <div key={idx} className="p-4 text-xs grid grid-cols-12 items-center hover:bg-[#252C3D]/30 transition-colors">
-                      <span className="col-span-7 font-medium text-white">{t.name}</span>
-                      <span className="col-span-3 font-mono text-slate-400">{t.suite}</span>
-                      <span className="col-span-2 text-right">
-                        {t.status === 'PASSED' && (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20">
-                            PASSED
-                          </span>
-                        )}
-                        {t.status === 'RUNNING' && (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20 animate-pulse">
-                            RUNNING
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 10: SETTINGS VIEW */}
+          {/* ==================================================================== */}
+          {/* 4. SETTINGS VIEW */}
+          {/* ==================================================================== */}
           {activeTab === 'settings' && (
             <div className="flex flex-col gap-6">
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <SettingsIcon className="w-5 h-5 text-[#F59E0B]" />
-                  Application Settings & Preferences
+                  Application Settings
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Manage desktop persistence parameters, theme defaults, and demonstration data.
+                  Manage data persistence, backup options, and system preferences.
                 </p>
               </div>
 
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-5">
-                <h3 className="text-sm font-semibold text-white">General & Data Storage</h3>
+              {/* Data & Persistence */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-white">Data Storage & Backup</h3>
                 
-                <div className="flex items-center justify-between pb-4 border-b border-[#2A3142]">
+                <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
                   <div>
                     <p className="text-xs font-medium text-white">Local Task Storage Format</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">RFC 4180 Comma-Separated Values (CSV)</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">RFC 4180 Comma-Separated Values (CSV) via LocalStorage</p>
                   </div>
-                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#111318] border border-[#2A3142] text-slate-300">
-                    data/tasks.csv
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#0F1117] border border-[#262C3D] text-slate-300">
+                    tasks.csv
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between pb-4 border-b border-[#2A3142]">
+                <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
                   <div>
-                    <p className="text-xs font-medium text-white">Automatic Persistence</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Immediately saves state after any create, edit, or delete</p>
+                    <p className="text-xs font-medium text-white">Automatic State Persistence</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Immediately saves state after any add, edit, or delete</p>
                   </div>
                   <button 
                     onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
@@ -1423,10 +1330,10 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between pb-4 border-b border-[#2A3142]">
+                <div className="flex items-center justify-between pb-4 border-b border-[#262C3D]">
                   <div>
-                    <p className="text-xs font-medium text-white">Overdue Warning Alerts</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Highlight tasks whose due date is earlier than today</p>
+                    <p className="text-xs font-medium text-white">Overdue Warning Highlights</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Highlight tasks whose due date has passed</p>
                   </div>
                   <button 
                     onClick={() => setShowOverdueBanner(!showOverdueBanner)}
@@ -1436,103 +1343,143 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                   <div>
-                    <p className="text-xs font-medium text-white">Reset to Presentation Sample Data</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Restores 7 academic demonstration tasks</p>
+                    <p className="text-xs font-medium text-white">Manual Export / Import</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Backup your task list to disk or load an existing CSV</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={handleDownloadCsv}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
+                      Export CSV
+                    </button>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-200 bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors flex items-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#F59E0B]" />
+                      Import CSV
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-[#262C3D]">
+                  <div>
+                    <p className="text-xs font-medium text-white">Reset Starter Tasks</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Replaces current tasks with the default starter set</p>
                   </div>
                   <button 
                     onClick={restoreSampleTasks}
                     className="px-3.5 py-1.5 text-xs font-medium text-white bg-[#EA580C] hover:bg-[#D97706] rounded-lg transition-colors flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Restore Samples
+                    Reset Tasks
                   </button>
                 </div>
               </div>
 
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-3">
-                <h3 className="text-sm font-semibold text-white">Build & Environment Information</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="text-slate-400">Application Version</span>
-                    <p className="font-mono text-white mt-1">v1.0.0 (Release)</p>
+              {/* System Profile Card */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-3 shadow-sm">
+                <h3 className="text-sm font-semibold text-white">System Profile</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
+                    <span className="text-slate-400">Administrator</span>
+                    <p className="font-semibold text-white mt-1">Dinesh Nikam</p>
                   </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="text-slate-400">C++ Compiler Target</span>
-                    <p className="font-mono text-white mt-1">C++17 (g++ / clang++)</p>
+                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
+                    <span className="text-slate-400">Role</span>
+                    <p className="font-semibold text-white mt-1">System Administrator</p>
                   </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="text-slate-400">Java Runtime</span>
-                    <p className="font-mono text-white mt-1">Java 17 (OpenJDK)</p>
-                  </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="text-slate-400">IPC Protocol</span>
-                    <p className="font-mono text-white mt-1">JSON over Stdin/Stdout</p>
+                  <div className="bg-[#0F1117] p-3 rounded-lg border border-[#262C3D]">
+                    <span className="text-slate-400">Application</span>
+                    <p className="font-semibold text-white mt-1">TaskFlow — Smart To-Do Manager</p>
                   </div>
                 </div>
               </div>
+
             </div>
           )}
 
-          {/* TAB 11: ABOUT PROJECT VIEW */}
+          {/* ==================================================================== */}
+          {/* 5. ABOUT VIEW */}
+          {/* ==================================================================== */}
           {activeTab === 'about' && (
             <div className="flex flex-col gap-6">
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Info className="w-5 h-5 text-[#F59E0B]" />
-                  About TaskFlow — Smart To-Do Manager
+                  About TaskFlow
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Capstone Dual-Language Systems Project for College Academic Presentation.
+                  A high-performance, privacy-first task and productivity management system.
                 </p>
               </div>
 
-              <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl p-6 flex flex-col gap-4 text-xs text-slate-300 leading-relaxed">
-                <h3 className="text-sm font-bold text-white">Project Abstract & Objectives</h3>
+              {/* Administrator Identity Card */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#EA580C] to-[#F59E0B] flex items-center justify-center text-base font-bold text-white shadow-md shrink-0">
+                  DN
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Dinesh Nikam</h3>
+                  <p className="text-xs text-[#F59E0B] font-medium">System Administrator</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Application: TaskFlow — Smart To-Do Manager
+                  </p>
+                </div>
+              </div>
+
+              {/* Product Overview & Features */}
+              <div className="bg-[#161924] border border-[#262C3D] rounded-xl p-6 flex flex-col gap-4 text-xs text-slate-300 leading-relaxed shadow-sm">
+                <h3 className="text-sm font-bold text-white">Product Overview</h3>
                 <p>
-                  Modern computing architectures frequently combine multi-paradigm software stacks to balance low-level algorithmic efficiency with high-level graphical interaction and rapid application development. <strong>TaskFlow</strong> is an enterprise-grade desktop task management system designed to demonstrate genuine inter-language computing between <strong>C++17</strong> and <strong>Java 17</strong>.
-                </p>
-                <p>
-                  The system leverages C++ for its deterministic algorithmic runtime, executing priority queue calculations, deadline overdue tracking, category filtration, and statistical aggregations. The user-facing presentation layer is engineered in Java Swing, utilizing Object-Oriented Design (OOD) patterns, event-driven reactive updates, and an RFC 4180 compliant CSV persistence engine.
+                  <strong>TaskFlow</strong> is a dedicated productivity platform engineered for clarity, speed, and effortless task organization. It provides intuitive task scheduling, priority sorting, category segmentation, and local data persistence without third-party tracking or cloud lock-in.
                 </p>
 
-                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#2A3142]">Technology Stack</h3>
+                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#262C3D]">Core Features</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="font-semibold text-white">C++17 Standalone Co-Processor</span>
-                    <p className="text-slate-400 mt-1">Implements std::sort (Introsort), priority queue weighting, lexicographical ISO date parsing, and standard I/O streaming.</p>
+                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
+                    <span className="font-semibold text-white">Priority & Deadline Management</span>
+                    <p className="text-slate-400 mt-1">High, Medium, and Low priority weighting with real-time overdue detection and chronological deadline sorting.</p>
                   </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="font-semibold text-white">Java 17 Desktop Client (Swing)</span>
-                    <p className="text-slate-400 mt-1">Implements clean modular OOP architecture (model, storage, service, integration, ui), reactive Observer pattern, and ProcessBuilder IPC.</p>
+                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
+                    <span className="font-semibold text-white">Dynamic Category Organization</span>
+                    <p className="text-slate-400 mt-1">Assign tasks to Work, Projects, College, Personal, or custom categories with progress analytics.</p>
                   </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="font-semibold text-white">ProcessBuilder IPC Bridge</span>
-                    <p className="text-slate-400 mt-1">Launches the native binary, writes JSON commands to stdin, and captures computed results from stdout with millisecond timing.</p>
+                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
+                    <span className="font-semibold text-white">RFC 4180 CSV Persistence</span>
+                    <p className="text-slate-400 mt-1">Full backup and restore support with comma escaping and quote preservation for all your task records.</p>
                   </div>
-                  <div className="bg-[#111318] p-3 rounded-lg border border-[#2A3142]">
-                    <span className="font-semibold text-white">RFC 4180 CSV Storage</span>
-                    <p className="text-slate-400 mt-1">Guarantees safe persistence in data/tasks.csv with quote doubling ("") and atomic file replacement (tasks.csv.tmp).</p>
+                  <div className="bg-[#0F1117] p-3.5 rounded-lg border border-[#262C3D]">
+                    <span className="font-semibold text-white">High Performance & Privacy First</span>
+                    <p className="text-slate-400 mt-1">Runs 100% locally in your browser with sub-millisecond response latency and immediate UI updates.</p>
                   </div>
                 </div>
 
-                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#2A3142]">Project Credits & Developer</h3>
+                <h3 className="text-sm font-bold text-white pt-2 border-t border-[#262C3D]">Architecture & Backend Co-Processor</h3>
                 <p className="text-slate-400">
-                  Developed by Pratyush Wakde for Computer Science & Engineering Academic Examination. 100% offline, privacy-first, zero cloud dependencies.
+                  TaskFlow includes a modular multi-tier architecture. In addition to this web companion, the repository contains a standalone C++17 algorithmic engine and Java 17 desktop Swing application for offline local compilation, linked via standard ProcessBuilder streams.
                 </p>
               </div>
+
             </div>
           )}
 
         </main>
       </div>
 
+      {/* ==================================================================== */}
       {/* CREATE / EDIT TASK MODAL */}
+      {/* ==================================================================== */}
       {isTaskModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#2A3142]">
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            
+            <div className="flex items-center justify-between pb-3 border-b border-[#262C3D]">
               <h3 className="font-bold text-white text-base">
                 {editingTask ? 'Edit Task' : 'Create New Task'}
               </h3>
@@ -1551,14 +1498,15 @@ export default function App() {
             )}
 
             <form onSubmit={handleSaveTask} className="flex flex-col gap-4 text-xs">
+              
               <div className="flex flex-col gap-1.5">
                 <label className="font-semibold text-slate-300">Task Title *</label>
                 <input 
                   type="text"
-                  placeholder="e.g. Prepare Java practical demonstration"
+                  placeholder="e.g. Complete quarterly budget review"
                   value={modalTitle}
                   onChange={e => setModalTitle(e.target.value)}
-                  className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
+                  className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
                 />
               </div>
 
@@ -1566,10 +1514,10 @@ export default function App() {
                 <label className="font-semibold text-slate-300">Description (Optional)</label>
                 <textarea 
                   rows={3}
-                  placeholder="Enter details, notes, or constraints..."
+                  placeholder="Enter additional details, notes, or subtasks..."
                   value={modalDesc}
                   onChange={e => setModalDesc(e.target.value)}
-                  className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
+                  className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]"
                 />
               </div>
 
@@ -1579,12 +1527,12 @@ export default function App() {
                   <select 
                     value={modalCategory}
                     onChange={e => setModalCategory(e.target.value as Category)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
                   >
-                    <option value="COLLEGE">College</option>
-                    <option value="PERSONAL">Personal</option>
                     <option value="WORK">Work</option>
                     <option value="PROJECTS">Projects</option>
+                    <option value="COLLEGE">College</option>
+                    <option value="PERSONAL">Personal</option>
                     <option value="OTHER">Other</option>
                   </select>
                 </div>
@@ -1594,11 +1542,11 @@ export default function App() {
                   <select 
                     value={modalPriority}
                     onChange={e => setModalPriority(e.target.value as Priority)}
-                    className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
+                    className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
                   >
-                    <option value="HIGH">High (Rank 3)</option>
-                    <option value="MEDIUM">Medium (Rank 2)</option>
-                    <option value="LOW">Low (Rank 1)</option>
+                    <option value="HIGH">High Priority</option>
+                    <option value="MEDIUM">Medium Priority</option>
+                    <option value="LOW">Low Priority</option>
                   </select>
                 </div>
               </div>
@@ -1609,7 +1557,7 @@ export default function App() {
                   type="date"
                   value={modalDueDate}
                   onChange={e => setModalDueDate(e.target.value)}
-                  className="bg-[#111318] border border-[#2A3142] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
+                  className="bg-[#0F1117] border border-[#262C3D] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#F59E0B]"
                 />
               </div>
 
@@ -1619,17 +1567,17 @@ export default function App() {
                     type="checkbox"
                     checked={modalCompleted}
                     onChange={e => setModalCompleted(e.target.checked)}
-                    className="rounded border-[#2A3142] bg-[#111318] text-[#EA580C] focus:ring-0"
+                    className="rounded border-[#262C3D] bg-[#0F1117] text-[#EA580C] focus:ring-0"
                   />
                   Mark as completed
                 </label>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#2A3142]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#262C3D]">
                 <button 
                   type="button"
                   onClick={() => setIsTaskModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors"
+                  className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -1640,21 +1588,24 @@ export default function App() {
                   {editingTask ? 'Save Changes' : 'Create Task'}
                 </button>
               </div>
+
             </form>
           </div>
         </div>
       )}
 
-      {/* CONFIRMATION MODAL */}
+      {/* ==================================================================== */}
+      {/* CONFIRMATION DIALOG MODAL */}
+      {/* ==================================================================== */}
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-[#1A1E29] border border-[#2A3142] rounded-xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-[#161924] border border-[#262C3D] rounded-xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4">
             <h3 className="font-bold text-white text-base">{confirmDialog.title}</h3>
             <p className="text-xs text-slate-300 leading-relaxed">{confirmDialog.message}</p>
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#2A3142]">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#262C3D]">
               <button 
                 onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-                className="px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#252C3D] hover:bg-[#2E364A] rounded-lg transition-colors"
+                className="px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white bg-[#222838] hover:bg-[#2C344A] rounded-lg transition-colors"
               >
                 Cancel
               </button>
